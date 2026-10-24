@@ -102,6 +102,8 @@ const SEED_VIDEOS = [
   }
 ];
 
+const PLATFORM_OPTIONS = ['TikTok', 'Instagram', 'YouTube Shorts', 'Facebook Reels'];
+
 export default function App() {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
@@ -140,7 +142,7 @@ export default function App() {
     notes: '',
     status: 'Inspiration',
     targetDate: new Date().toISOString().split('T')[0],
-    platforms: ['Instagram']
+    platforms: ['Instagram', 'TikTok']
   });
 
   const [modelFormData, setModelFormData] = useState({
@@ -161,22 +163,17 @@ export default function App() {
 
   // --- CARGAR DATOS DESDE SUPABASE ---
   useEffect(() => {
-    loadCloudData();
+    fetchCloudData();
   }, []);
 
-  const loadCloudData = async () => {
+  const fetchCloudData = async () => {
     if (!supabase) {
-      // Fallback a localStorage si supabase no está disponible
-      setUsers(JSON.parse(localStorage.getItem('cps_db_users_v2')) || SEED_USERS);
-      setModels(JSON.parse(localStorage.getItem('cps_db_models_v2')) || SEED_MODELS);
-      setVideos(JSON.parse(localStorage.getItem('cps_db_videos_v2')) || SEED_VIDEOS);
-      setCurrentUser(JSON.parse(localStorage.getItem('cps_current_user_v2')) || null);
       setIsDataLoaded(true);
       return;
     }
 
     try {
-      // 1. Usuarios
+      // 1. Cargar Usuarios
       const { data: dbUsers } = await supabase.from('app_users').select('*');
       if (dbUsers && dbUsers.length > 0) {
         setUsers(dbUsers);
@@ -185,7 +182,7 @@ export default function App() {
         setUsers(SEED_USERS);
       }
 
-      // 2. Modelos
+      // 2. Cargar Modelos
       const { data: dbModels } = await supabase.from('models').select('*');
       if (dbModels && dbModels.length > 0) {
         setModels(dbModels);
@@ -194,25 +191,36 @@ export default function App() {
         setModels(SEED_MODELS);
       }
 
-      // 3. Vídeos
+      // 3. Cargar Vídeos
       const { data: dbVideos } = await supabase.from('videos').select('*');
-      if (dbVideos && dbVideos.length > 0) {
+      if (dbVideos) {
         setVideos(dbVideos);
-      } else {
-        await supabase.from('videos').insert(SEED_VIDEOS);
-        setVideos(SEED_VIDEOS);
       }
 
       // Cargar sesión guardada localmente
       const savedUser = localStorage.getItem('cps_current_user_v2');
       if (savedUser) setCurrentUser(JSON.parse(savedUser));
 
-    } catch (err) {
-      console.error('Error cargando desde Supabase:', err);
+      const savedTheme = localStorage.getItem('cps_theme_v2');
+      if (savedTheme !== null) setDarkMode(JSON.parse(savedTheme));
+
+    } catch (e) {
+      console.error('Error al conectar con Supabase:', e);
     } finally {
       setIsDataLoaded(true);
     }
   };
+
+  // Theme Toggler
+  useEffect(() => {
+    if (!isDataLoaded) return;
+    localStorage.setItem('cps_theme_v2', JSON.stringify(darkMode));
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode, isDataLoaded]);
 
   // Toast Trigger Helper
   const showToast = (message, type = 'success') => {
@@ -251,6 +259,35 @@ export default function App() {
 
   const isAdmin = currentUser?.role === 'Admin';
 
+  // --- TOGGLE PLATFORMS ---
+  const togglePlatform = (platform) => {
+    setVideoFormData((prev) => {
+      const exists = prev.platforms?.includes(platform);
+      if (exists) {
+        return { ...prev, platforms: prev.platforms.filter((p) => p !== platform) };
+      } else {
+        return { ...prev, platforms: [...(prev.platforms || []), platform] };
+      }
+    });
+  };
+
+  // --- FILE UPLOAD HANDLER ---
+  const handleVideoFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 30 * 1024 * 1024) {
+        showToast('El archivo supera los 30MB recomendados.', 'danger');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setVideoFormData((prev) => ({ ...prev, mediaUrl: reader.result }));
+        showToast('Borrador cargado');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   // --- CRUD: VIDEOS (SUPABASE) ---
   const handleVideoSubmit = async (e) => {
     e.preventDefault();
@@ -275,6 +312,7 @@ export default function App() {
       setVideos([newVideo, ...videos]);
       showToast('Nuevo vídeo guardado');
     }
+
     closeVideoModal();
   };
 
@@ -289,7 +327,7 @@ export default function App() {
       notes: 'Un vídeo así haré esta semana',
       status: 'Inspiration',
       targetDate: new Date().toISOString().split('T')[0],
-      platforms: ['Instagram', 'TikTok']
+      platforms: ['TikTok', 'Instagram']
     });
     setIsVideoModalOpen(true);
   };
@@ -332,6 +370,7 @@ export default function App() {
       setModels([...models, newModel]);
       showToast('Modelo creada con éxito');
     }
+
     closeModelModal();
   };
 
@@ -348,7 +387,58 @@ export default function App() {
     setModelFormData({ name: '', handle: '', color: '#6366f1', avatarUrl: '', socialLink: '', notes: '' });
   };
 
-  // --- DELETE EXECUTION ---
+  // --- CRUD: USERS (SUPABASE) ---
+  const handleUserSubmit = async (e) => {
+    e.preventDefault();
+    if (!isAdmin || !userFormData.username.trim() || !userFormData.password.trim()) return;
+
+    if (editingUser) {
+      const updated = { ...userFormData, id: editingUser.id };
+      if (supabase) {
+        await supabase.from('app_users').update(updated).eq('id', editingUser.id);
+      }
+      setUsers(users.map((u) => (u.id === editingUser.id ? updated : u)));
+      if (editingUser.id === currentUser.id) {
+        setCurrentUser(updated);
+        localStorage.setItem('cps_current_user_v2', JSON.stringify(updated));
+      }
+      showToast('Usuario modificado');
+    } else {
+      const newUser = {
+        ...userFormData,
+        id: 'usr_' + Date.now().toString()
+      };
+      if (supabase) {
+        await supabase.from('app_users').insert([newUser]);
+      }
+      setUsers([...users, newUser]);
+      showToast('Nuevo usuario creado');
+    }
+
+    closeUserModal();
+  };
+
+  const openNewUserModal = () => {
+    if (!isAdmin) return;
+    setEditingUser(null);
+    setUserFormData({ name: '', username: '', password: '', role: 'Lector' });
+    setIsUserModalOpen(true);
+  };
+
+  const handleEditUser = (user) => {
+    if (!isAdmin) return;
+    setEditingUser(user);
+    setUserFormData(user);
+    setIsUserModalOpen(true);
+  };
+
+  const closeUserModal = () => {
+    setIsUserModalOpen(false);
+    setEditingUser(null);
+    setUserFormData({ name: '', username: '', password: '', role: 'Lector' });
+  };
+
+  // --- ABSOLUTE DELETE EXECUTION ---
   const requestDelete = (type, id, title) => {
     if (!isAdmin) return;
     if (type === 'user' && id === currentUser.id) {
@@ -374,13 +464,20 @@ export default function App() {
       }
       setModels(models.filter((m) => m.id !== id));
       setVideos(videos.filter((v) => v.modelId !== id));
-      if (selectedModelFilter === id) setSelectedModelFilter('all');
+      if (selectedModelFilter === id) {
+        setSelectedModelFilter('all');
+      }
       showToast('Modelo y sus vídeos fueron eliminados');
+    } else if (type === 'user') {
+      if (supabase) await supabase.from('app_users').delete().eq('id', id);
+      setUsers(users.filter((u) => u.id !== id));
+      showToast('Usuario eliminado');
     }
 
     setDeleteConfirm(null);
   };
 
+  // Calculated Maps & Filters
   const filteredVideos = useMemo(() => {
     return videos.filter((item) => {
       const matchesModel = selectedModelFilter === 'all' || item.modelId === selectedModelFilter;
@@ -409,6 +506,7 @@ export default function App() {
   if (!currentUser) {
     return (
       <div className={`min-h-screen flex items-center justify-center p-4 transition-colors duration-200 ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'}`}>
+        
         {toast && (
           <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-2xl text-xs font-bold text-white border ${
             toast.type === 'danger' ? 'bg-red-600 border-red-500' : 'bg-emerald-600 border-emerald-500'
@@ -418,6 +516,7 @@ export default function App() {
         )}
 
         <div className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 sm:p-8 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+          
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-pink-500 via-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
@@ -484,6 +583,7 @@ export default function App() {
               Entrar al Panel
             </button>
           </form>
+
         </div>
       </div>
     );
@@ -492,6 +592,8 @@ export default function App() {
   // --- MAIN APP DASHBOARD ---
   return (
     <div className={`min-h-screen transition-colors duration-200 ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
+      
+      {/* Toast Notification */}
       {toast && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-2xl text-xs font-bold text-white border transition-all animate-bounce ${
           toast.type === 'danger' ? 'bg-red-600 border-red-500' : 'bg-emerald-600 border-emerald-500'
@@ -503,16 +605,18 @@ export default function App() {
       {/* HEADER BAR */}
       <header className={`sticky top-0 z-30 border-b backdrop-blur-md ${darkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+          
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-pink-500 via-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
               <Video className="w-5 h-5" />
             </div>
             <div>
               <h1 className="font-bold text-base sm:text-lg leading-tight tracking-wide">Studio Planner</h1>
-              <span className="text-[10px] text-emerald-400 font-semibold">● Cloud Synced</span>
+              <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">● Cloud Synced</span>
             </div>
           </div>
 
+          {/* Model Filter Dropdown */}
           <div className="flex items-center gap-2">
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium ${darkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
               <Users className="w-3.5 h-3.5 text-indigo-400" />
@@ -545,12 +649,13 @@ export default function App() {
             )}
           </div>
 
+          {/* User Profile & Actions */}
           <div className="flex items-center gap-2">
             <div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs ${darkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
               <div className={`w-2 h-2 rounded-full ${isAdmin ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
               <div className="flex flex-col">
                 <span className="font-bold">{currentUser.username}</span>
-                <span className="text-[10px] text-slate-400">{isAdmin ? 'Admin' : 'Lector'}</span>
+                <span className="text-[10px] text-slate-400">{isAdmin ? 'Administrador' : 'Lector'}</span>
               </div>
             </div>
 
@@ -579,154 +684,339 @@ export default function App() {
               <LogOut className="w-4 h-4" />
             </button>
           </div>
+
         </div>
       </header>
 
+      {/* READ ONLY BANNER */}
+      {!isAdmin && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-xs font-medium text-amber-500 flex items-center justify-center gap-2">
+          <Eye className="w-4 h-4" /> Modo de Solo Lectura: Has iniciado sesión como usuario Lector.
+        </div>
+      )}
+
+      {/* NAVIGATION BAR */}
+      <div className={`border-b ${darkMode ? 'border-slate-800 bg-slate-900/40' : 'border-slate-200 bg-slate-100/50'} py-3 px-4 sm:px-8`}>
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+          
+          <div className={`flex p-1 rounded-xl border text-xs font-semibold ${darkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <button
+              onClick={() => setViewMode('models')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${viewMode === 'models' ? 'bg-gradient-to-r from-pink-500 to-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <FolderKanban className="w-3.5 h-3.5" /> Secciones por Modelo
+            </button>
+            
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${viewMode === 'calendar' ? 'bg-gradient-to-r from-pink-500 to-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <CalendarIcon className="w-3.5 h-3.5" /> Calendario
+            </button>
+
+            {isAdmin && (
+              <button
+                onClick={() => setViewMode('users')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${viewMode === 'users' ? 'bg-gradient-to-r from-pink-500 to-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <Users className="w-3.5 h-3.5" /> Gestión de Usuarios
+              </button>
+            )}
+          </div>
+
+          {viewMode !== 'users' && (
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs w-full md:w-64 ${darkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <Search className="w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar vídeos o notas..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-transparent border-none outline-none w-full"
+              />
+            </div>
+          )}
+
+        </div>
+      </div>
+
       {/* MAIN CONTAINER */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="space-y-8">
-          {(selectedModelFilter === 'all' 
-            ? models 
-            : models.filter((m) => m.id === selectedModelFilter)
-          ).map((model) => {
-            const modelVideos = filteredVideos.filter((item) => item.modelId === model.id);
+        
+        {/* VIEW 1: SECTIONS BY MODEL */}
+        {viewMode === 'models' && (
+          <div className="space-y-8">
+            {(selectedModelFilter === 'all' 
+              ? models 
+              : models.filter((m) => m.id === selectedModelFilter)
+            ).map((model) => {
+              const modelVideos = filteredVideos.filter((item) => item.modelId === model.id);
 
-            return (
-              <div key={model.id} className={`rounded-2xl border overflow-hidden ${darkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'} shadow-sm`}>
-                
-                {/* Model Header */}
-                <div className={`p-4 border-b flex flex-wrap items-center justify-between gap-3 ${darkMode ? 'border-slate-800 bg-slate-900/80' : 'border-slate-100 bg-slate-50'}`}>
-                  <div className="flex items-center gap-3">
-                    {model.avatarUrl ? (
-                      <img 
-                        src={model.avatarUrl} 
-                        alt={model.name} 
-                        className="w-11 h-11 rounded-full object-cover border-2 shadow"
-                        style={{ borderColor: model.color || '#6366f1' }}
-                      />
-                    ) : (
-                      <div className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-white text-base shadow" style={{ backgroundColor: model.color || '#6366f1' }}>
-                        {model.name.charAt(0)}
-                      </div>
-                    )}
-
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-base">{model.name}</h3>
-                        <span className="text-xs text-slate-400">{model.handle}</span>
-                        {model.socialLink && (
-                          <a href={model.socialLink} target="_blank" rel="noopener noreferrer" className="p-1 text-slate-400 hover:text-indigo-400">
-                            <Globe className="w-3.5 h-3.5" />
-                          </a>
-                        )}
-                      </div>
-                      {model.notes && <p className="text-xs text-slate-500">{model.notes}</p>}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {isAdmin && (
-                      <>
-                        <button
-                          onClick={() => openNewVideoModal(model.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
-                        >
-                          <PlusCircle className="w-3.5 h-3.5" /> Añadir vídeo
-                        </button>
-                        <button onClick={() => handleEditModel(model)} className="p-1.5 text-slate-400 hover:text-slate-200">
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => requestDelete('model', model.id, model.name)} className="p-1.5 text-slate-400 hover:text-red-400">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Video Grid */}
-                <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {modelVideos.map((item) => (
-                    <div key={item.id} className={`rounded-xl border p-4 ${darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'} flex flex-col justify-between gap-4`}>
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                            {item.status}
-                          </span>
-                          <span className="text-xs text-slate-400">{item.targetDate}</span>
+              return (
+                <div key={model.id} className={`rounded-2xl border overflow-hidden ${darkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'} shadow-sm`}>
+                  
+                  {/* Model Header */}
+                  <div className={`p-4 border-b flex flex-wrap items-center justify-between gap-3 ${darkMode ? 'border-slate-800 bg-slate-900/80' : 'border-slate-100 bg-slate-50'}`}>
+                    <div className="flex items-center gap-3">
+                      {model.avatarUrl ? (
+                        <img 
+                          src={model.avatarUrl} 
+                          alt={model.name} 
+                          className="w-11 h-11 rounded-full object-cover border-2 shadow"
+                          style={{ borderColor: model.color || '#6366f1' }}
+                        />
+                      ) : (
+                        <div className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-white text-base shadow" style={{ backgroundColor: model.color || '#6366f1' }}>
+                          {model.name.charAt(0)}
                         </div>
-                        <h4 className="font-bold text-sm mb-1">{item.title}</h4>
-                        {item.notes && <p className="text-xs text-slate-400 line-clamp-2">{item.notes}</p>}
-                      </div>
+                      )}
 
-                      <div className="flex items-center justify-between pt-3 border-t border-slate-800/80">
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">{item.platforms?.[0] || 'Social'}</span>
-                        {isAdmin && (
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleEditVideo(item)} className="p-1 text-slate-400 hover:text-slate-200">
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => requestDelete('video', item.id, item.title)} className="p-1 text-slate-400 hover:text-red-400">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-base">{model.name}</h3>
+                          <span className="text-xs text-slate-400">{model.handle}</span>
+
+                          {model.socialLink && (
+                            <a
+                              href={model.socialLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1 text-slate-400 hover:text-indigo-400 transition-colors"
+                              title="Ver Red Social"
+                            >
+                              <Globe className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </div>
+                        {model.notes && <p className="text-xs text-slate-500">{model.notes}</p>}
                       </div>
                     </div>
-                  ))}
-                  {modelVideos.length === 0 && (
-                    <div className="col-span-full py-6 text-center text-xs text-slate-500">
-                      No hay vídeos en esta sección.
+
+                    <div className="flex items-center gap-2">
+                      {isAdmin && (
+                        <>
+                          <button
+                            onClick={() => openNewVideoModal(model.id)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5" /> Añadir vídeo
+                          </button>
+
+                          <button
+                            onClick={() => handleEditModel(model)}
+                            className="p-1.5 text-slate-400 hover:text-slate-200"
+                            title="Editar Modelo"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={() => requestDelete('model', model.id, model.name)}
+                            className="p-1.5 text-slate-400 hover:text-red-400"
+                            title="Eliminar Modelo"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
-                  )}
+                  </div>
+
+                  {/* Video Grid */}
+                  <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {modelVideos.map((item) => (
+                      <div key={item.id} className={`rounded-xl border p-4 ${darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'} flex flex-col justify-between gap-4 shadow-sm`}>
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                              {item.status}
+                            </span>
+                            <span className="text-xs text-slate-400">{item.targetDate}</span>
+                          </div>
+                          <h4 className="font-bold text-sm mb-1">{item.title}</h4>
+                          {item.notes && <p className="text-xs text-slate-400 line-clamp-2">{item.notes}</p>}
+                        </div>
+
+                        <div className="flex items-center justify-between pt-3 border-t border-slate-800/80">
+                          <div className="flex flex-wrap gap-1">
+                            {item.platforms?.map((p, idx) => (
+                              <span key={idx} className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">{p}</span>
+                            ))}
+                          </div>
+
+                          {isAdmin && (
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleEditVideo(item)} className="p-1 text-slate-400 hover:text-slate-200" title="Editar">
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => requestDelete('video', item.id, item.title)} className="p-1 text-slate-400 hover:text-red-400" title="Eliminar">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {modelVideos.length === 0 && (
+                      <div className="col-span-full py-8 text-center text-xs text-slate-500">
+                        No hay vídeos registrados para esta modelo.
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* VIEW 2: CALENDAR */}
+        {viewMode === 'calendar' && (
+          <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <CalendarIcon className="w-5 h-5 text-indigo-500" /> Planificación por Fechas
+            </h2>
+            <div className="space-y-3">
+              {videos.sort((a, b) => new Date(a.targetDate) - new Date(b.targetDate)).map((item) => {
+                const model = modelMap[item.modelId];
+                return (
+                  <div key={item.id} className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: model?.color || '#6366f1' }} />
+                      <div>
+                        <h4 className="font-bold text-sm">{item.title}</h4>
+                        <p className="text-xs text-slate-400">Modelo: {model?.name || 'Desconocida'} • Fecha: {item.targetDate}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">
+                      {item.status}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 3: USERS MANAGEMENT */}
+        {viewMode === 'users' && isAdmin && (
+          <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Users className="w-5 h-5 text-indigo-500" /> Gestión de Usuarios del Estudio
+              </h2>
+              <button
+                onClick={openNewUserModal}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-500"
+              >
+                <UserPlus className="w-3.5 h-3.5" /> Nuevo Usuario
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {users.map((u) => (
+                <div key={u.id} className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                  <div>
+                    <h4 className="font-bold text-sm flex items-center gap-2">
+                      {u.name || u.username}
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${u.role === 'Admin' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
+                        {u.role}
+                      </span>
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-1">Usuario: <code className="text-indigo-400">{u.username}</code></p>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => handleEditUser(u)} className="p-1.5 text-slate-400 hover:text-white" title="Editar">
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    {u.id !== currentUser.id && (
+                      <button onClick={() => requestDelete('user', u.id, u.username)} className="p-1.5 text-slate-400 hover:text-red-400" title="Eliminar">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </main>
 
-      {/* MODAL VÍDEO */}
+      {/* MODAL COMPLETO: NUEVO / EDITAR VÍDEO PLANEADO */}
       {isVideoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border bg-slate-900 border-slate-800 p-6 shadow-2xl text-slate-100">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold">{editingItem ? 'Editar Vídeo' : 'Nuevo Vídeo'}</h3>
+          <div className="w-full max-w-lg rounded-2xl border bg-slate-900 border-slate-800 p-6 shadow-2xl text-slate-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-5">
+              <div className="flex items-center gap-2 text-pink-500 font-bold text-lg">
+                <Sparkles className="w-5 h-5" />
+                <h3>{editingItem ? 'Editar Vídeo Planeado' : 'Nuevo Vídeo Planeado'}</h3>
+              </div>
               <button onClick={closeVideoModal} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
 
             <form onSubmit={handleVideoSubmit} className="space-y-4">
+              
+              {/* Modelo / Creadora */}
               <div>
-                <label className="block text-xs font-semibold mb-1 text-slate-400">Modelo</label>
+                <label className="block text-xs font-semibold mb-1 text-slate-300">Modelo / Creadora *</label>
                 <select
                   value={videoFormData.modelId}
                   onChange={(e) => setVideoFormData({ ...videoFormData, modelId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white font-medium"
                 >
                   {models.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
+                    <option key={m.id} value={m.id}>{m.name} ({m.handle})</option>
                   ))}
                 </select>
               </div>
 
+              {/* Título / Concepto */}
               <div>
-                <label className="block text-xs font-semibold mb-1 text-slate-400">Título</label>
+                <label className="block text-xs font-semibold mb-1 text-slate-300">Título / Concepto del vídeo *</label>
                 <input
                   type="text"
                   required
+                  placeholder="Ej: Transición con ropa de verano"
                   value={videoFormData.title}
                   onChange={(e) => setVideoFormData({ ...videoFormData, title: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
                 />
               </div>
 
+              {/* Link de referencia / Inspo */}
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-slate-300">Link de referencia / Inspo</label>
+                <div className="relative">
+                  <LinkIcon className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                  <input
+                    type="url"
+                    placeholder="https://tiktok.com/... o instagram.com/reel/..."
+                    value={videoFormData.referenceLink || ''}
+                    onChange={(e) => setVideoFormData({ ...videoFormData, referenceLink: e.target.value })}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Subir Borrador o Muestra */}
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-slate-300">Subir Borrador o Muestra</label>
+                <label className="border border-dashed border-slate-800 hover:border-indigo-500 bg-slate-950 rounded-xl p-3 flex items-center justify-center gap-2 cursor-pointer transition-colors text-xs text-slate-400 font-medium">
+                  <Upload className="w-4 h-4 text-indigo-400" />
+                  <span>{videoFormData.mediaUrl ? '✅ Archivo Adjuntado (Cambiar)' : 'Adjuntar archivo de vídeo'}</span>
+                  <input type="file" accept="video/*" onChange={handleVideoFileUpload} className="hidden" />
+                </label>
+              </div>
+
+              {/* Estado y Fecha Planificada */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold mb-1 text-slate-400">Estado</label>
+                  <label className="block text-xs font-semibold mb-1 text-slate-300">Estado</label>
                   <select
                     value={videoFormData.status}
                     onChange={(e) => setVideoFormData({ ...videoFormData, status: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                    className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
                   >
                     <option value="Inspiration">💡 Idea / Inspo</option>
                     <option value="En Producción">🎬 En Producción</option>
@@ -736,36 +1026,66 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold mb-1 text-slate-400">Fecha Objetivo</label>
+                  <label className="block text-xs font-semibold mb-1 text-slate-300">Fecha Planificada</label>
                   <input
                     type="date"
                     value={videoFormData.targetDate}
                     onChange={(e) => setVideoFormData({ ...videoFormData, targetDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                    className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
                   />
                 </div>
               </div>
 
+              {/* Plataformas */}
               <div>
-                <label className="block text-xs font-semibold mb-1 text-slate-400">Notas</label>
+                <label className="block text-xs font-semibold mb-2 text-slate-300">Plataformas</label>
+                <div className="flex flex-wrap gap-2">
+                  {PLATFORM_OPTIONS.map((platform) => {
+                    const isSelected = videoFormData.platforms?.includes(platform);
+                    return (
+                      <button
+                        type="button"
+                        key={platform}
+                        onClick={() => togglePlatform(platform)}
+                        className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                          isSelected
+                            ? 'bg-gradient-to-r from-pink-500 to-indigo-600 text-white shadow-md'
+                            : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        {platform}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Notas / Idea de Ejecución */}
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-slate-300">Notas / Idea de Ejecución</label>
                 <textarea
                   rows="3"
+                  placeholder="Un vídeo así haré esta semana"
                   value={videoFormData.notes}
                   onChange={(e) => setVideoFormData({ ...videoFormData, notes: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white resize-none"
+                  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white resize-none"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-4">
-                <button type="button" onClick={closeVideoModal} className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 text-sm">Cancelar</button>
-                <button type="submit" className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-sm">Guardar</button>
+              {/* Acciones */}
+              <div className="flex justify-end items-center gap-3 pt-4">
+                <button type="button" onClick={closeVideoModal} className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-sm font-medium">Cancelar</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-indigo-600 hover:opacity-90 text-white font-bold text-sm shadow-lg shadow-indigo-500/25">
+                  {editingItem ? 'Guardar Cambios' : 'Crear Vídeo'}
+                </button>
               </div>
+
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL MODELO */}
+      {/* MODAL: MODELO */}
       {isModelModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border bg-slate-900 border-slate-800 p-6 shadow-2xl text-slate-100">
@@ -787,7 +1107,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold mb-1 text-slate-400">Handle</label>
+                <label className="block text-xs font-semibold mb-1 text-slate-400">Handle / Red Social</label>
                 <input
                   type="text"
                   value={modelFormData.handle}
@@ -796,24 +1116,98 @@ export default function App() {
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-slate-400">Notas / Descripción</label>
+                <input
+                  type="text"
+                  value={modelFormData.notes}
+                  onChange={(e) => setModelFormData({ ...modelFormData, notes: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                />
+              </div>
+
               <div className="flex justify-end gap-2 pt-4">
                 <button type="button" onClick={closeModelModal} className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 text-sm">Cancelar</button>
-                <button type="submit" className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-sm">Guardar</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-sm">Guardar Modelo</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL ELIMINAR */}
+      {/* MODAL: USUARIO */}
+      {isUserModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border bg-slate-900 border-slate-800 p-6 shadow-2xl text-slate-100">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold">{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</h3>
+              <button onClick={closeUserModal} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleUserSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-slate-400">Nombre Completo</label>
+                <input
+                  type="text"
+                  required
+                  value={userFormData.name}
+                  onChange={(e) => setUserFormData({ ...userFormData, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-slate-400">Nombre de Usuario</label>
+                <input
+                  type="text"
+                  required
+                  value={userFormData.username}
+                  onChange={(e) => setUserFormData({ ...userFormData, username: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-slate-400">Contraseña</label>
+                <input
+                  type="text"
+                  required
+                  value={userFormData.password}
+                  onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-slate-400">Rol</label>
+                <select
+                  value={userFormData.role}
+                  onChange={(e) => setUserFormData({ ...userFormData, role: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                >
+                  <option value="Admin">Admin (Control total)</option>
+                  <option value="Lector">Lector (Solo ver)</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <button type="button" onClick={closeUserModal} className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 text-sm">Cancelar</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-sm">Guardar Usuario</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ELIMINAR */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border bg-slate-900 border-slate-800 p-6 text-center shadow-2xl text-slate-100">
             <h3 className="text-base font-bold mb-2">¿Estás segura?</h3>
-            <p className="text-xs text-slate-400 mb-6">Vas a eliminar <strong className="text-white">"{deleteConfirm.title}"</strong>.</p>
+            <p className="text-xs text-slate-400 mb-6">Vas a eliminar <strong className="text-white">"{deleteConfirm.title}"</strong> permanentemente.</p>
             <div className="flex gap-2 justify-center">
               <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 text-xs">Cancelar</button>
-              <button onClick={executeDelete} className="px-4 py-2 rounded-xl bg-red-600 text-white font-semibold text-xs">Eliminar</button>
+              <button onClick={executeDelete} className="px-4 py-2 rounded-xl bg-red-600 text-white font-semibold text-xs">Sí, eliminar</button>
             </div>
           </div>
         </div>
