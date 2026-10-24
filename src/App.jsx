@@ -7,6 +7,12 @@ import {
   AlertTriangle, Globe, Image as ImageIcon, CheckCircle, RefreshCw
 } from 'lucide-react';
 
+
+// Inicializar cliente de Supabase
+const SUPABASE_URL = 'https://eeksouotnjqhfxywfuvh.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_yn1K0PuqxX6fZehRQBmqAw_wArBvDf_';
+
+const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 // --- INITIAL SEED USERS ---
 const SEED_USERS = [
   {
