@@ -4,7 +4,8 @@ import {
   Trash2, Edit3, ExternalLink, Moon, Sun, Search, X, Upload, 
   Play, Sparkles, User, Users, FolderKanban, Clock, PlusCircle,
   Lock, LogOut, ShieldCheck, Eye, UserPlus, UserCheck, Key,
-  AlertTriangle, Globe, Image as ImageIcon, CheckCircle, RefreshCw
+  AlertTriangle, Globe, Image as ImageIcon, CheckCircle, RefreshCw,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 // Inicializar cliente de Supabase
@@ -13,7 +14,7 @@ const SUPABASE_KEY = 'sb_publishable_yn1K0PuqxX6fZehRQBmqAw_wArBvDf_';
 
 const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-// --- INITIAL SEED USERS ---
+// --- USUARIOS INICIALES DE ACCESO ---
 const SEED_USERS = [
   {
     id: 'u_admin',
@@ -28,77 +29,6 @@ const SEED_USERS = [
     password: 'Lector1234',
     role: 'Lector',
     name: 'Usuario Lectura'
-  }
-];
-
-// --- INITIAL SEED MODELS ---
-const SEED_MODELS = [
-  {
-    id: 'm1',
-    name: 'Modelo A (Elena)',
-    handle: '@elena_official',
-    color: '#ec4899',
-    avatarUrl: '',
-    socialLink: 'https://instagram.com',
-    notes: 'Enfoque en moda, lifestyle y rutinas diarias.'
-  },
-  {
-    id: 'm2',
-    name: 'Modelo B (Sofia)',
-    handle: '@sofia_fit',
-    color: '#10b981',
-    avatarUrl: '',
-    socialLink: 'https://instagram.com',
-    notes: 'Contenido de fitness, suplementos y nutrición.'
-  },
-  {
-    id: 'm3',
-    name: 'Cuenta Personal',
-    handle: '@mi_estudio',
-    color: '#6366f1',
-    avatarUrl: '',
-    socialLink: 'https://youtube.com',
-    notes: 'Behind the scenes del estudio de edición y consejos.'
-  }
-];
-
-// --- INITIAL SEED VIDEOS ---
-const SEED_VIDEOS = [
-  {
-    id: 'v1',
-    modelId: 'm1',
-    title: 'Transición de Outfits Otoño / Invierno',
-    referenceLink: 'https://www.instagram.com/reels/',
-    mediaUrl: '',
-    notes: 'Transición rápida con chasquido de dedos al ritmo del audio tendencia de la semana.',
-    status: 'Inspiration',
-    targetDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-    platforms: ['Instagram', 'TikTok'],
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'v2',
-    modelId: 'm1',
-    title: 'Get Ready With Me (GRWM) para evento',
-    referenceLink: 'https://www.tiktok.com/',
-    mediaUrl: '',
-    notes: 'Un vídeo así haré esta semana. Estilo dinámico con voz en off contando una anécdota.',
-    status: 'En Producción',
-    targetDate: new Date(Date.now() + 86400000 * 4).toISOString().split('T')[0],
-    platforms: ['TikTok', 'Instagram'],
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'v3',
-    modelId: 'm2',
-    title: '5 Errores comunes en Sentadilla',
-    referenceLink: 'https://youtube.com/shorts/',
-    mediaUrl: '',
-    notes: 'Explicación técnica en los primeros 3 segundos. Texto en pantalla llamativo.',
-    status: 'Listo para subir',
-    targetDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
-    platforms: ['YouTube Shorts', 'Instagram'],
-    createdAt: new Date().toISOString()
   }
 ];
 
@@ -119,6 +49,9 @@ export default function App() {
   const [selectedModelFilter, setSelectedModelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Calendar Navigation State
+  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
+
   // Toast Feedback State
   const [toast, setToast] = useState(null);
 
@@ -183,11 +116,8 @@ export default function App() {
 
       // 2. Cargar Modelos
       const { data: dbModels } = await supabase.from('models').select('*');
-      if (dbModels && dbModels.length > 0) {
+      if (dbModels) {
         setModels(dbModels);
-      } else {
-        await supabase.from('models').insert(SEED_MODELS);
-        setModels(SEED_MODELS);
       }
 
       // 3. Cargar Vídeos
@@ -315,7 +245,7 @@ export default function App() {
     closeVideoModal();
   };
 
-  const openNewVideoModal = (defaultModelId = null) => {
+  const openNewVideoModal = (defaultModelId = null, defaultDate = null) => {
     if (!isAdmin) return;
     setEditingItem(null);
     setVideoFormData({
@@ -323,9 +253,9 @@ export default function App() {
       title: '',
       referenceLink: '',
       mediaUrl: '',
-      notes: 'Un vídeo así haré esta semana',
+      notes: '',
       status: 'Inspiration',
-      targetDate: new Date().toISOString().split('T')[0],
+      targetDate: defaultDate || new Date().toISOString().split('T')[0],
       platforms: ['TikTok', 'Instagram']
     });
     setIsVideoModalOpen(true);
@@ -334,7 +264,11 @@ export default function App() {
   const handleEditVideo = (item) => {
     if (!isAdmin) return;
     setEditingItem(item);
-    setVideoFormData(item);
+    setVideoFormData({
+      ...item,
+      modelId: item.modelId || item.model_id || '',
+      targetDate: item.targetDate || item.target_date || new Date().toISOString().split('T')[0]
+    });
     setIsVideoModalOpen(true);
   };
 
@@ -457,9 +391,10 @@ export default function App() {
       if (supabase) {
         await supabase.from('models').delete().eq('id', id);
         await supabase.from('videos').delete().eq('modelId', id);
+        await supabase.from('videos').delete().eq('model_id', id);
       }
       setModels(models.filter((m) => m.id !== id));
-      setVideos(videos.filter((v) => v.modelId !== id || v.model_id !== id));
+      setVideos(videos.filter((v) => (v.modelId || v.model_id) !== id));
       if (selectedModelFilter === id) {
         setSelectedModelFilter('all');
       }
@@ -484,13 +419,61 @@ export default function App() {
     });
   }, [videos, selectedModelFilter, searchQuery]);
 
-  // MAPA FLEXIBLE DE MODELOS (Resuelve la modelo incluso si viene con camelCase o snake_case)
   const modelMap = useMemo(() => {
     return models.reduce((acc, m) => {
       acc[m.id] = m;
       return acc;
     }, {});
   }, [models]);
+
+  // --- LÓGICA DE GENERACIÓN DE DÍAS PARA CALENDARIO MES ---
+  const calendarDays = useMemo(() => {
+    const year = currentCalendarDate.getFullYear();
+    const month = currentCalendarDate.getMonth();
+
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+
+    // Ajustar para que la semana empiece el Lunes (0: Lunes, 6: Domingo)
+    let startDayOfWeek = firstDayOfMonth.getDay() - 1;
+    if (startDayOfWeek === -1) startDayOfWeek = 6;
+
+    const days = [];
+
+    // Días del mes anterior para rellenar
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+      const dayNum = prevMonthLastDay - i;
+      days.push({
+        dateStr: null,
+        dayNum,
+        isCurrentMonth: false
+      });
+    }
+
+    // Días del mes actual
+    for (let d = 1; d <= lastDayOfMonth.getDate(); d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      days.push({
+        dateStr,
+        dayNum: d,
+        isCurrentMonth: true
+      });
+    }
+
+    // Días del siguiente mes para completar la cuadrícula (múltiplo de 7)
+    const totalCells = Math.ceil(days.length / 7) * 7;
+    const nextDaysNeeded = totalCells - days.length;
+    for (let nd = 1; nd <= nextDaysNeeded; nd++) {
+      days.push({
+        dateStr: null,
+        dayNum: nd,
+        isCurrentMonth: false
+      });
+    }
+
+    return days;
+  }, [currentCalendarDate]);
 
   if (!isDataLoaded) {
     return (
@@ -744,6 +727,26 @@ export default function App() {
         {/* VIEW 1: SECTIONS BY MODEL */}
         {viewMode === 'models' && (
           <div className="space-y-8">
+            {models.length === 0 && (
+              <div className={`p-12 text-center rounded-2xl border ${darkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
+                <User className="w-10 h-10 mx-auto text-slate-600 mb-3" />
+                <h3 className="font-bold text-base mb-1">Aún no hay modelos registradas</h3>
+                <p className="text-xs text-slate-400 mb-4">Empieza agregando la primera modelo para gestionar su contenido.</p>
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      setEditingModel(null);
+                      setModelFormData({ name: '', handle: '', color: '#6366f1', avatarUrl: '', socialLink: '', notes: '' });
+                      setIsModelModalOpen(true);
+                    }}
+                    className="px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-pink-500 to-indigo-600 text-white"
+                  >
+                    + Añadir Modelo
+                  </button>
+                )}
+              </div>
+            )}
+
             {(selectedModelFilter === 'all' 
               ? models 
               : models.filter((m) => m.id === selectedModelFilter)
@@ -867,41 +870,118 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 2: CALENDAR (VINCULADO CORRECTAMENTE) */}
+        {/* VIEW 2: REAL CALENDAR GRID */}
         {viewMode === 'calendar' && (
-          <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
-            <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5 text-indigo-500" /> Planificación por Fechas
-            </h2>
-            <div className="space-y-3">
-              {filteredVideos
-                .sort((a, b) => new Date(a.targetDate || a.target_date) - new Date(b.targetDate || b.target_date))
-                .map((item) => {
-                  const itemModelId = item.modelId || item.model_id;
-                  const model = modelMap[itemModelId];
-                  return (
-                    <div key={item.id} className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: model?.color || '#6366f1' }} />
-                        <div>
-                          <h4 className="font-bold text-sm">{item.title}</h4>
-                          <p className="text-xs text-slate-400">
-                            Modelo: <strong className="text-slate-200">{model ? `${model.name} (${model.handle})` : 'Sin asignar'}</strong> • Fecha: {item.targetDate || item.target_date || 'Sin fecha'}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium flex-shrink-0">
-                        {item.status}
-                      </span>
-                    </div>
-                  );
-                })}
-              {filteredVideos.length === 0 && (
-                <div className="py-8 text-center text-xs text-slate-500">
-                  No hay vídeos planificados para mostrar en el calendario.
-                </div>
-              )}
+          <div className={`p-4 sm:p-6 rounded-2xl border ${darkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
+            
+            {/* Calendar Header Control */}
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5 text-indigo-500" />
+                <h2 className="text-lg font-bold capitalize">
+                  {currentCalendarDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+                </h2>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const prev = new Date(currentCalendarDate);
+                    prev.setMonth(prev.getMonth() - 1);
+                    setCurrentCalendarDate(prev);
+                  }}
+                  className={`p-2 rounded-xl border text-xs font-semibold ${darkMode ? 'bg-slate-950 border-slate-800 hover:bg-slate-800' : 'bg-slate-100 border-slate-200 hover:bg-slate-200'}`}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <button
+                  onClick={() => setCurrentCalendarDate(new Date())}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold ${darkMode ? 'bg-slate-950 border-slate-800 hover:bg-slate-800' : 'bg-slate-100 border-slate-200 hover:bg-slate-200'}`}
+                >
+                  Hoy
+                </button>
+
+                <button
+                  onClick={() => {
+                    const next = new Date(currentCalendarDate);
+                    next.setMonth(next.getMonth() + 1);
+                    setCurrentCalendarDate(next);
+                  }}
+                  className={`p-2 rounded-xl border text-xs font-semibold ${darkMode ? 'bg-slate-950 border-slate-800 hover:bg-slate-800' : 'bg-slate-100 border-slate-200 hover:bg-slate-200'}`}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
+
+            {/* Days of Week Header */}
+            <div className="grid grid-cols-7 gap-1 text-center font-bold text-xs uppercase tracking-wider mb-2 text-slate-400">
+              <div>Lun</div>
+              <div>Mar</div>
+              <div>Mié</div>
+              <div>Jue</div>
+              <div>Vie</div>
+              <div>Sáb</div>
+              <div>Dom</div>
+            </div>
+
+            {/* Calendar Days Grid */}
+            <div className="grid grid-cols-7 gap-1 sm:gap-2">
+              {calendarDays.map((day, idx) => {
+                const dayVideos = day.dateStr ? filteredVideos.filter((v) => (v.targetDate || v.target_date) === day.dateStr) : [];
+                const isToday = day.dateStr === new Date().toISOString().split('T')[0];
+
+                return (
+                  <div
+                    key={idx}
+                    className={`min-h-[90px] sm:min-h-[110px] p-2 rounded-xl border flex flex-col justify-between transition-all ${
+                      day.isCurrentMonth
+                        ? darkMode ? 'bg-slate-900/70 border-slate-800' : 'bg-slate-50 border-slate-200'
+                        : darkMode ? 'bg-slate-950/40 border-slate-900 opacity-40' : 'bg-slate-100/40 border-slate-100 opacity-40'
+                    } ${isToday ? 'ring-2 ring-indigo-500' : ''}`}
+                  >
+                    <div className="flex justify-between items-center mb-1">
+                      <span className={`text-xs font-bold ${isToday ? 'text-indigo-400' : day.isCurrentMonth ? 'text-slate-200' : 'text-slate-500'}`}>
+                        {day.dayNum}
+                      </span>
+                      {isAdmin && day.isCurrentMonth && (
+                        <button
+                          onClick={() => openNewVideoModal(null, day.dateStr)}
+                          className="text-slate-500 hover:text-indigo-400 p-0.5"
+                          title="Agendar vídeo este día"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1 overflow-y-auto max-h-[70px]">
+                      {dayVideos.map((video) => {
+                        const m = modelMap[video.modelId || video.model_id];
+                        return (
+                          <div
+                            key={video.id}
+                            onClick={() => handleEditVideo(video)}
+                            className="p-1 rounded text-[10px] cursor-pointer hover:opacity-80 transition-opacity flex flex-col gap-0.5 border"
+                            style={{
+                              backgroundColor: `${m?.color || '#6366f1'}20`,
+                              borderColor: `${m?.color || '#6366f1'}50`,
+                              color: darkMode ? '#ffffff' : '#000000'
+                            }}
+                            title={`${video.title} - ${m?.name || 'Modelo'}`}
+                          >
+                            <span className="font-bold line-clamp-1">{video.title}</span>
+                            <span className="text-[9px] opacity-75">{m?.name ? m.name.split(' ')[0] : 'Vídeo'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
           </div>
         )}
 
@@ -973,6 +1053,7 @@ export default function App() {
                   onChange={(e) => setVideoFormData({ ...videoFormData, modelId: e.target.value })}
                   className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white font-medium"
                 >
+                  <option value="">Seleccionar Modelo...</option>
                   {models.map((m) => (
                     <option key={m.id} value={m.id}>{m.name} ({m.handle})</option>
                   ))}
@@ -1073,7 +1154,7 @@ export default function App() {
                 <label className="block text-xs font-semibold mb-1 text-slate-300">Notas / Idea de Ejecución</label>
                 <textarea
                   rows="3"
-                  placeholder="Un vídeo así haré esta semana"
+                  placeholder="Escribe notas o el guión aquí..."
                   value={videoFormData.notes}
                   onChange={(e) => setVideoFormData({ ...videoFormData, notes: e.target.value })}
                   className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white resize-none"
@@ -1108,6 +1189,7 @@ export default function App() {
                 <input
                   type="text"
                   required
+                  placeholder="Ej: Elena"
                   value={modelFormData.name}
                   onChange={(e) => setModelFormData({ ...modelFormData, name: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
@@ -1118,6 +1200,7 @@ export default function App() {
                 <label className="block text-xs font-semibold mb-1 text-slate-400">Handle / Red Social</label>
                 <input
                   type="text"
+                  placeholder="Ej: @elena_official"
                   value={modelFormData.handle}
                   onChange={(e) => setModelFormData({ ...modelFormData, handle: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
@@ -1128,6 +1211,7 @@ export default function App() {
                 <label className="block text-xs font-semibold mb-1 text-slate-400">Notas / Descripción</label>
                 <input
                   type="text"
+                  placeholder="Ej: Contenido de moda"
                   value={modelFormData.notes}
                   onChange={(e) => setModelFormData({ ...modelFormData, notes: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
