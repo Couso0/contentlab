@@ -5,7 +5,7 @@ import {
   Play, Sparkles, User, Users, FolderKanban, Clock, PlusCircle,
   Lock, LogOut, ShieldCheck, Eye, UserPlus, UserCheck, Key,
   AlertTriangle, Globe, Image as ImageIcon, CheckCircle, RefreshCw,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Download
 } from 'lucide-react';
 
 // Inicializar cliente de Supabase
@@ -669,7 +669,7 @@ export default function App() {
       {/* READ ONLY BANNER */}
       {!isAdmin && (
         <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-xs font-medium text-amber-500 flex items-center justify-center gap-2">
-          <Eye className="w-4 h-4" /> Modo de Solo Lectura: Haz clic en cualquier vídeo para ver sus detalles.
+          <Eye className="w-4 h-4" /> Modo de Solo Lectura: Haz clic en cualquier vídeo para ver sus detalles y descargar archivos.
         </div>
       )}
 
@@ -1098,19 +1098,37 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Subir Borrador o Muestra */}
+              {/* Subir Borrador / Descargar Muestra */}
               <div>
-                <label className="block text-xs font-semibold mb-1 text-slate-300">Subir Borrador o Muestra</label>
-                {isAdmin ? (
+                <label className="block text-xs font-semibold mb-1 text-slate-300">Subir / Descargar Borrador</label>
+                
+                {/* BOTÓN DE DESCARGA SI HAY ARCHIVO */}
+                {videoFormData.mediaUrl && (
+                  <div className="mb-2 p-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 flex items-center justify-between gap-2">
+                    <span className="text-xs text-indigo-300 font-semibold truncate flex items-center gap-2">
+                      <Play className="w-4 h-4 text-indigo-400" /> Borrador adjunto listo
+                    </span>
+                    <a
+                      href={videoFormData.mediaUrl}
+                      download={`borrador_${videoFormData.title || 'video'}.mp4`}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow transition-all flex-shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Descargar
+                    </a>
+                  </div>
+                )}
+
+                {isAdmin && (
                   <label className="border border-dashed border-slate-800 hover:border-indigo-500 bg-slate-950 rounded-xl p-3 flex items-center justify-center gap-2 cursor-pointer transition-colors text-xs text-slate-400 font-medium">
                     <Upload className="w-4 h-4 text-indigo-400" />
-                    <span>{videoFormData.mediaUrl ? '✅ Archivo Adjuntado (Cambiar)' : 'Adjuntar archivo de vídeo'}</span>
+                    <span>{videoFormData.mediaUrl ? 'Reemplazar archivo de vídeo' : 'Adjuntar archivo de vídeo'}</span>
                     <input type="file" accept="video/*" onChange={handleVideoFileUpload} className="hidden" />
                   </label>
-                ) : (
-                  <div className="border border-slate-800 bg-slate-950 rounded-xl p-3 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium opacity-80">
-                    <Upload className="w-4 h-4 text-indigo-400" />
-                    <span>{videoFormData.mediaUrl ? '✅ Archivo adjunto disponible' : 'Sin archivo adjunto'}</span>
+                )}
+
+                {!isAdmin && !videoFormData.mediaUrl && (
+                  <div className="border border-slate-800 bg-slate-950 rounded-xl p-3 flex items-center justify-center gap-2 text-xs text-slate-500">
+                    Sin archivo de borrador adjunto
                   </div>
                 )}
               </div>
