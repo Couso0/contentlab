@@ -190,6 +190,7 @@ export default function App() {
 
   // --- TOGGLE PLATFORMS ---
   const togglePlatform = (platform) => {
+    if (!isAdmin) return;
     setVideoFormData((prev) => {
       const exists = prev.platforms?.includes(platform);
       if (exists) {
@@ -202,6 +203,7 @@ export default function App() {
 
   // --- FILE UPLOAD HANDLER ---
   const handleVideoFileUpload = (e) => {
+    if (!isAdmin) return;
     const file = e.target.files[0];
     if (file) {
       if (file.size > 30 * 1024 * 1024) {
@@ -262,7 +264,6 @@ export default function App() {
   };
 
   const handleEditVideo = (item) => {
-    if (!isAdmin) return;
     setEditingItem(item);
     setVideoFormData({
       ...item,
@@ -434,13 +435,11 @@ export default function App() {
     const firstDayOfMonth = new Date(year, month, 1);
     const lastDayOfMonth = new Date(year, month + 1, 0);
 
-    // Ajustar para que la semana empiece el Lunes (0: Lunes, 6: Domingo)
     let startDayOfWeek = firstDayOfMonth.getDay() - 1;
     if (startDayOfWeek === -1) startDayOfWeek = 6;
 
     const days = [];
 
-    // Días del mes anterior para rellenar
     const prevMonthLastDay = new Date(year, month, 0).getDate();
     for (let i = startDayOfWeek - 1; i >= 0; i--) {
       const dayNum = prevMonthLastDay - i;
@@ -451,7 +450,6 @@ export default function App() {
       });
     }
 
-    // Días del mes actual
     for (let d = 1; d <= lastDayOfMonth.getDate(); d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       days.push({
@@ -461,7 +459,6 @@ export default function App() {
       });
     }
 
-    // Días del siguiente mes para completar la cuadrícula (múltiplo de 7)
     const totalCells = Math.ceil(days.length / 7) * 7;
     const nextDaysNeeded = totalCells - days.length;
     for (let nd = 1; nd <= nextDaysNeeded; nd++) {
@@ -672,7 +669,7 @@ export default function App() {
       {/* READ ONLY BANNER */}
       {!isAdmin && (
         <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-xs font-medium text-amber-500 flex items-center justify-center gap-2">
-          <Eye className="w-4 h-4" /> Modo de Solo Lectura: Has iniciado sesión como usuario Lector.
+          <Eye className="w-4 h-4" /> Modo de Solo Lectura: Haz clic en cualquier vídeo para ver sus detalles.
         </div>
       )}
 
@@ -826,7 +823,11 @@ export default function App() {
                   {/* Video Grid */}
                   <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {modelVideos.map((item) => (
-                      <div key={item.id} className={`rounded-xl border p-4 ${darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'} flex flex-col justify-between gap-4 shadow-sm`}>
+                      <div 
+                        key={item.id} 
+                        onClick={() => handleEditVideo(item)}
+                        className={`rounded-xl border p-4 ${darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'} flex flex-col justify-between gap-4 shadow-sm cursor-pointer hover:border-indigo-500/50 transition-colors`}
+                      >
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
@@ -846,7 +847,7 @@ export default function App() {
                           </div>
 
                           {isAdmin && (
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                               <button onClick={() => handleEditVideo(item)} className="p-1 text-slate-400 hover:text-slate-200" title="Editar">
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
@@ -1031,27 +1032,34 @@ export default function App() {
 
       </main>
 
-      {/* MODAL COMPLETO: NUEVO / EDITAR VÍDEO PLANEADO */}
+      {/* MODAL COMPLETO: NUEVO / EDITAR / VER VÍDEO */}
       {isVideoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-2xl border bg-slate-900 border-slate-800 p-6 shadow-2xl text-slate-100 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-5">
               <div className="flex items-center gap-2 text-pink-500 font-bold text-lg">
                 <Sparkles className="w-5 h-5" />
-                <h3>{editingItem ? 'Editar Vídeo Planeado' : 'Nuevo Vídeo Planeado'}</h3>
+                <h3>
+                  {!isAdmin 
+                    ? 'Detalles del Vídeo' 
+                    : editingItem 
+                      ? 'Editar Vídeo Planeado' 
+                      : 'Nuevo Vídeo Planeado'}
+                </h3>
               </div>
               <button onClick={closeVideoModal} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
 
-            <form onSubmit={handleVideoSubmit} className="space-y-4">
+            <form onSubmit={isAdmin ? handleVideoSubmit : (e) => { e.preventDefault(); closeVideoModal(); }} className="space-y-4">
               
               {/* Modelo / Creadora */}
               <div>
                 <label className="block text-xs font-semibold mb-1 text-slate-300">Modelo / Creadora *</label>
                 <select
+                  disabled={!isAdmin}
                   value={videoFormData.modelId}
                   onChange={(e) => setVideoFormData({ ...videoFormData, modelId: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white font-medium"
+                  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white font-medium disabled:opacity-80 disabled:cursor-not-allowed"
                 >
                   <option value="">Seleccionar Modelo...</option>
                   {models.map((m) => (
@@ -1066,10 +1074,11 @@ export default function App() {
                 <input
                   type="text"
                   required
+                  disabled={!isAdmin}
                   placeholder="Ej: Transición con ropa de verano"
                   value={videoFormData.title}
                   onChange={(e) => setVideoFormData({ ...videoFormData, title: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white disabled:opacity-80 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -1080,10 +1089,11 @@ export default function App() {
                   <LinkIcon className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                   <input
                     type="url"
+                    disabled={!isAdmin}
                     placeholder="https://tiktok.com/... o instagram.com/reel/..."
                     value={videoFormData.referenceLink || ''}
                     onChange={(e) => setVideoFormData({ ...videoFormData, referenceLink: e.target.value })}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white disabled:opacity-80 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -1091,11 +1101,18 @@ export default function App() {
               {/* Subir Borrador o Muestra */}
               <div>
                 <label className="block text-xs font-semibold mb-1 text-slate-300">Subir Borrador o Muestra</label>
-                <label className="border border-dashed border-slate-800 hover:border-indigo-500 bg-slate-950 rounded-xl p-3 flex items-center justify-center gap-2 cursor-pointer transition-colors text-xs text-slate-400 font-medium">
-                  <Upload className="w-4 h-4 text-indigo-400" />
-                  <span>{videoFormData.mediaUrl ? '✅ Archivo Adjuntado (Cambiar)' : 'Adjuntar archivo de vídeo'}</span>
-                  <input type="file" accept="video/*" onChange={handleVideoFileUpload} className="hidden" />
-                </label>
+                {isAdmin ? (
+                  <label className="border border-dashed border-slate-800 hover:border-indigo-500 bg-slate-950 rounded-xl p-3 flex items-center justify-center gap-2 cursor-pointer transition-colors text-xs text-slate-400 font-medium">
+                    <Upload className="w-4 h-4 text-indigo-400" />
+                    <span>{videoFormData.mediaUrl ? '✅ Archivo Adjuntado (Cambiar)' : 'Adjuntar archivo de vídeo'}</span>
+                    <input type="file" accept="video/*" onChange={handleVideoFileUpload} className="hidden" />
+                  </label>
+                ) : (
+                  <div className="border border-slate-800 bg-slate-950 rounded-xl p-3 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium opacity-80">
+                    <Upload className="w-4 h-4 text-indigo-400" />
+                    <span>{videoFormData.mediaUrl ? '✅ Archivo adjunto disponible' : 'Sin archivo adjunto'}</span>
+                  </div>
+                )}
               </div>
 
               {/* Estado y Fecha Planificada */}
@@ -1103,9 +1120,10 @@ export default function App() {
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-slate-300">Estado</label>
                   <select
+                    disabled={!isAdmin}
                     value={videoFormData.status}
                     onChange={(e) => setVideoFormData({ ...videoFormData, status: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                    className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white disabled:opacity-80 disabled:cursor-not-allowed"
                   >
                     <option value="Inspiration">💡 Idea / Inspo</option>
                     <option value="En Producción">🎬 En Producción</option>
@@ -1118,9 +1136,10 @@ export default function App() {
                   <label className="block text-xs font-semibold mb-1 text-slate-300">Fecha Planificada</label>
                   <input
                     type="date"
+                    disabled={!isAdmin}
                     value={videoFormData.targetDate}
                     onChange={(e) => setVideoFormData({ ...videoFormData, targetDate: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white"
+                    className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white disabled:opacity-80 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -1135,12 +1154,12 @@ export default function App() {
                       <button
                         type="button"
                         key={platform}
-                        onClick={() => togglePlatform(platform)}
+                        onClick={() => isAdmin && togglePlatform(platform)}
                         className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
                           isSelected
                             ? 'bg-gradient-to-r from-pink-500 to-indigo-600 text-white shadow-md'
-                            : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
-                        }`}
+                            : 'bg-slate-950 text-slate-400 border border-slate-800'
+                        } ${!isAdmin ? 'cursor-default opacity-90' : 'hover:text-white'}`}
                       >
                         {platform}
                       </button>
@@ -1154,19 +1173,28 @@ export default function App() {
                 <label className="block text-xs font-semibold mb-1 text-slate-300">Notas / Idea de Ejecución</label>
                 <textarea
                   rows="3"
+                  disabled={!isAdmin}
                   placeholder="Escribe notas o el guión aquí..."
                   value={videoFormData.notes}
                   onChange={(e) => setVideoFormData({ ...videoFormData, notes: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white resize-none"
+                  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none bg-slate-950 border-slate-800 text-white resize-none disabled:opacity-80 disabled:cursor-not-allowed"
                 />
               </div>
 
               {/* Acciones */}
               <div className="flex justify-end items-center gap-3 pt-4">
-                <button type="button" onClick={closeVideoModal} className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-sm font-medium">Cancelar</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-indigo-600 hover:opacity-90 text-white font-bold text-sm shadow-lg shadow-indigo-500/25">
-                  {editingItem ? 'Guardar Cambios' : 'Crear Vídeo'}
-                </button>
+                {isAdmin ? (
+                  <>
+                    <button type="button" onClick={closeVideoModal} className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-sm font-medium">Cancelar</button>
+                    <button type="submit" className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-indigo-600 hover:opacity-90 text-white font-bold text-sm shadow-lg shadow-indigo-500/25">
+                      {editingItem ? 'Guardar Cambios' : 'Crear Vídeo'}
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" onClick={closeVideoModal} className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-lg">
+                    Cerrar
+                  </button>
+                )}
               </div>
 
             </form>
