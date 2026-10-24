@@ -123,7 +123,9 @@ export default function App() {
       // 3. Cargar Vídeos
       const { data: dbVideos } = await supabase.from('videos').select('*');
       if (dbVideos) {
-        setVideos(dbVideos);
+        // Filtrar duplicados por ID al cargar de la DB
+        const uniqueVideos = Array.from(new Map(dbVideos.map(item => [item.id, item])).values());
+        setVideos(uniqueVideos);
       }
 
       // Cargar sesión guardada localmente
@@ -219,7 +221,7 @@ export default function App() {
     }
   };
 
-  // --- CRUD: VIDEOS (SUPABASE) ---
+  // --- CRUD: VIDEOS (SUPABASE CON PREVENCIÓN DE DUPLICADOS) ---
   const handleVideoSubmit = async (e) => {
     e.preventDefault();
     if (!isAdmin || !videoFormData.title.trim()) return;
@@ -229,18 +231,29 @@ export default function App() {
       if (supabase) {
         await supabase.from('videos').update(updated).eq('id', editingItem.id);
       }
-      setVideos(videos.map((v) => (v.id === editingItem.id ? updated : v)));
+      setVideos((prev) => prev.map((v) => (v.id === editingItem.id ? updated : v)));
       showToast('Vídeo actualizado correctamente');
     } else {
+      // Usar UUID único para evitar repetición de IDs
+      const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID 
+        ? 'vid_' + crypto.randomUUID() 
+        : 'vid_' + Date.now().toString() + '_' + Math.random().toString(36).substring(2, 7);
+
       const newVideo = {
         ...videoFormData,
-        id: 'vid_' + Date.now().toString(),
+        id: uniqueId,
         createdAt: new Date().toISOString()
       };
+
       if (supabase) {
         await supabase.from('videos').insert([newVideo]);
       }
-      setVideos([newVideo, ...videos]);
+      
+      // Asegurarse de que no esté ya en la lista antes de añadirlo
+      setVideos((prev) => {
+        if (prev.some(v => v.id === newVideo.id)) return prev;
+        return [newVideo, ...prev];
+      });
       showToast('Nuevo vídeo guardado');
     }
 
@@ -409,9 +422,17 @@ export default function App() {
     setDeleteConfirm(null);
   };
 
-  // Calculated Maps & Filters
+  // Calculated Maps & Filters (garantizando elementos únicos)
   const filteredVideos = useMemo(() => {
-    return videos.filter((item) => {
+    // Eliminar duplicados garantizados por id
+    const uniqueMap = new Map();
+    videos.forEach((item) => {
+      if (!uniqueMap.has(item.id)) {
+        uniqueMap.set(item.id, item);
+      }
+    });
+
+    return Array.from(uniqueMap.values()).filter((item) => {
       const itemModelId = item.modelId || item.model_id;
       const matchesModel = selectedModelFilter === 'all' || itemModelId === selectedModelFilter;
       const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
