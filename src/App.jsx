@@ -126,7 +126,6 @@ export default function App() {
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-  const [readOnlyViewItem, setReadOnlyViewItem] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   // Form States
@@ -333,10 +332,7 @@ export default function App() {
   };
 
   const handleEditVideo = (item) => {
-    if (!isAdmin) {
-      setReadOnlyViewItem(item);
-      return;
-    }
+    if (!isAdmin) return;
     setEditingItem(item);
     setVideoFormData(item);
     setIsVideoModalOpen(true);
@@ -463,7 +459,7 @@ export default function App() {
         await supabase.from('videos').delete().eq('modelId', id);
       }
       setModels(models.filter((m) => m.id !== id));
-      setVideos(videos.filter((v) => v.modelId !== id));
+      setVideos(videos.filter((v) => v.modelId !== id || v.model_id !== id));
       if (selectedModelFilter === id) {
         setSelectedModelFilter('all');
       }
@@ -480,13 +476,15 @@ export default function App() {
   // Calculated Maps & Filters
   const filteredVideos = useMemo(() => {
     return videos.filter((item) => {
-      const matchesModel = selectedModelFilter === 'all' || item.modelId === selectedModelFilter;
+      const itemModelId = item.modelId || item.model_id;
+      const matchesModel = selectedModelFilter === 'all' || itemModelId === selectedModelFilter;
       const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             (item.notes && item.notes.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesModel && matchesSearch;
     });
   }, [videos, selectedModelFilter, searchQuery]);
 
+  // MAPA FLEXIBLE DE MODELOS (Resuelve la modelo incluso si viene con camelCase o snake_case)
   const modelMap = useMemo(() => {
     return models.reduce((acc, m) => {
       acc[m.id] = m;
@@ -750,7 +748,7 @@ export default function App() {
               ? models 
               : models.filter((m) => m.id === selectedModelFilter)
             ).map((model) => {
-              const modelVideos = filteredVideos.filter((item) => item.modelId === model.id);
+              const modelVideos = filteredVideos.filter((item) => (item.modelId || item.model_id) === model.id);
 
               return (
                 <div key={model.id} className={`rounded-2xl border overflow-hidden ${darkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'} shadow-sm`}>
@@ -831,7 +829,7 @@ export default function App() {
                             <span className="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                               {item.status}
                             </span>
-                            <span className="text-xs text-slate-400">{item.targetDate}</span>
+                            <span className="text-xs text-slate-400">{item.targetDate || item.target_date}</span>
                           </div>
                           <h4 className="font-bold text-sm mb-1">{item.title}</h4>
                           {item.notes && <p className="text-xs text-slate-400 line-clamp-2">{item.notes}</p>}
@@ -869,30 +867,40 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 2: CALENDAR */}
+        {/* VIEW 2: CALENDAR (VINCULADO CORRECTAMENTE) */}
         {viewMode === 'calendar' && (
           <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
             <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
               <CalendarIcon className="w-5 h-5 text-indigo-500" /> Planificación por Fechas
             </h2>
             <div className="space-y-3">
-              {videos.sort((a, b) => new Date(a.targetDate) - new Date(b.targetDate)).map((item) => {
-                const model = modelMap[item.modelId];
-                return (
-                  <div key={item.id} className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: model?.color || '#6366f1' }} />
-                      <div>
-                        <h4 className="font-bold text-sm">{item.title}</h4>
-                        <p className="text-xs text-slate-400">Modelo: {model?.name || 'Desconocida'} • Fecha: {item.targetDate}</p>
+              {filteredVideos
+                .sort((a, b) => new Date(a.targetDate || a.target_date) - new Date(b.targetDate || b.target_date))
+                .map((item) => {
+                  const itemModelId = item.modelId || item.model_id;
+                  const model = modelMap[itemModelId];
+                  return (
+                    <div key={item.id} className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${darkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: model?.color || '#6366f1' }} />
+                        <div>
+                          <h4 className="font-bold text-sm">{item.title}</h4>
+                          <p className="text-xs text-slate-400">
+                            Modelo: <strong className="text-slate-200">{model ? `${model.name} (${model.handle})` : 'Sin asignar'}</strong> • Fecha: {item.targetDate || item.target_date || 'Sin fecha'}
+                          </p>
+                        </div>
                       </div>
+                      <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium flex-shrink-0">
+                        {item.status}
+                      </span>
                     </div>
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">
-                      {item.status}
-                    </span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              {filteredVideos.length === 0 && (
+                <div className="py-8 text-center text-xs text-slate-500">
+                  No hay vídeos planificados para mostrar en el calendario.
+                </div>
+              )}
             </div>
           </div>
         )}
