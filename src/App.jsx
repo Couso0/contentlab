@@ -10,7 +10,7 @@ import {
 
 // Inicializar cliente de Supabase
 const SUPABASE_URL = 'https://eeksouotnjqhfxywfuvh.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_yn1K0PuqxX6fZehRQBmqAw_wArBvDf_';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVla3NvdW90bmpxaGZ4eXdmdXZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4MDcxNzksImV4cCI6MjEwODM4MzE3OX0.l1Z4W6bM4WaXgHgKTeeWy3Ime9kJ5dCU3xhwHcLbdKk';
 
 const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
