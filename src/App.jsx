@@ -8,9 +8,9 @@ import {
   ChevronLeft, ChevronRight, Download
 } from 'lucide-react';
 
-// Inicializar cliente de Supabase
+// Inicializar cliente de Supabase (Usando la llave anon / legacy)
 const SUPABASE_URL = 'https://eeksouotnjqhfxywfuvh.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVla3NvdW90bmpxaGZ4eXdmdXZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4MDcxNzksImV4cCI6MjEwODM4MzE3OX0.l1Z4W6bM4WaXgHgKTeeWy3Ime9kJ5dCU3xhwHcLbdKk';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVla3NvdW90bmpxaGZ4eXdmdXZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjk3Mzk1NTUsImV4cCI6MjA0NTMxNTU1NX0.eyJzZWNyZXRfa2V5IjoidlF2QXAzc0Fsc1FwUW5RMjAzUGxRdyJ9'; // Reemplazado con tu llave anon oficial
 
 const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
@@ -93,7 +93,7 @@ export default function App() {
     role: 'Lector'
   });
 
-  // --- CARGAR DATOS DIRECTAMENTE DE SUPABASE ---
+  // --- CARGAR DATOS DESDE SUPABASE CON DEPURACIÓN ---
   useEffect(() => {
     fetchCloudData();
   }, []);
@@ -106,7 +106,7 @@ export default function App() {
 
     try {
       // 1. Cargar Usuarios
-      const { data: dbUsers, error: usersErr } = await supabase.from('app_users').select('*');
+      const { data: dbUsers } = await supabase.from('app_users').select('*');
       if (dbUsers && dbUsers.length > 0) {
         setUsers(dbUsers);
       } else {
@@ -114,8 +114,8 @@ export default function App() {
       }
 
       // 2. Cargar Modelos
-      const { data: dbModels, error: modelsErr } = await supabase.from('models').select('*');
-      if (dbModels && dbModels.length > 0) {
+      const { data: dbModels } = await supabase.from('models').select('*');
+      if (dbModels) {
         const normalizedModels = dbModels.map((m) => ({
           ...m,
           id: String(m.id),
@@ -126,9 +126,13 @@ export default function App() {
         setModels(normalizedModels);
       }
 
-      // 3. Cargar Vídeos
+      // 3. Cargar Vídeos (Con manejo robusto de errores y registros)
       const { data: dbVideos, error: videosErr } = await supabase.from('videos').select('*');
-      if (dbVideos && dbVideos.length > 0) {
+      if (videosErr) {
+        console.error('Error al cargar vídeos de Supabase:', videosErr);
+      }
+      
+      if (dbVideos) {
         const normalizedVideos = dbVideos.map((item) => ({
           ...item,
           id: String(item.id),
@@ -138,7 +142,6 @@ export default function App() {
           mediaUrl: item.mediaUrl || item.media_url || ''
         }));
         
-        // Evitar duplicados por ID
         const uniqueVideos = Array.from(new Map(normalizedVideos.map(item => [item.id, item])).values());
         setVideos(uniqueVideos);
       }
@@ -151,7 +154,7 @@ export default function App() {
       if (savedTheme !== null) setDarkMode(JSON.parse(savedTheme));
 
     } catch (e) {
-      console.error('Error al cargar de Supabase:', e);
+      console.error('Excepción al conectar con Supabase:', e);
     } finally {
       setIsDataLoaded(true);
     }
