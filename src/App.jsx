@@ -93,7 +93,7 @@ export default function App() {
     role: 'Lector'
   });
 
-  // --- CARGAR DATOS DESDE SUPABASE ---
+  // --- CARGAR DATOS DIRECTAMENTE DE SUPABASE ---
   useEffect(() => {
     fetchCloudData();
   }, []);
@@ -106,29 +106,44 @@ export default function App() {
 
     try {
       // 1. Cargar Usuarios
-      const { data: dbUsers } = await supabase.from('app_users').select('*');
+      const { data: dbUsers, error: usersErr } = await supabase.from('app_users').select('*');
       if (dbUsers && dbUsers.length > 0) {
         setUsers(dbUsers);
       } else {
-        await supabase.from('app_users').insert(SEED_USERS);
         setUsers(SEED_USERS);
       }
 
       // 2. Cargar Modelos
-      const { data: dbModels } = await supabase.from('models').select('*');
-      if (dbModels) {
-        setModels(dbModels);
+      const { data: dbModels, error: modelsErr } = await supabase.from('models').select('*');
+      if (dbModels && dbModels.length > 0) {
+        const normalizedModels = dbModels.map((m) => ({
+          ...m,
+          id: String(m.id),
+          name: m.name || 'Sin Nombre',
+          avatarUrl: m.avatarUrl || m.avatar_url || '',
+          socialLink: m.socialLink || m.social_link || ''
+        }));
+        setModels(normalizedModels);
       }
 
       // 3. Cargar Vídeos
-      const { data: dbVideos } = await supabase.from('videos').select('*');
-      if (dbVideos) {
-        // Filtrar duplicados por ID al cargar de la DB
-        const uniqueVideos = Array.from(new Map(dbVideos.map(item => [item.id, item])).values());
+      const { data: dbVideos, error: videosErr } = await supabase.from('videos').select('*');
+      if (dbVideos && dbVideos.length > 0) {
+        const normalizedVideos = dbVideos.map((item) => ({
+          ...item,
+          id: String(item.id),
+          modelId: String(item.modelId || item.model_id || ''),
+          targetDate: item.targetDate || item.target_date || new Date().toISOString().split('T')[0],
+          referenceLink: item.referenceLink || item.reference_link || '',
+          mediaUrl: item.mediaUrl || item.media_url || ''
+        }));
+        
+        // Evitar duplicados por ID
+        const uniqueVideos = Array.from(new Map(normalizedVideos.map(item => [item.id, item])).values());
         setVideos(uniqueVideos);
       }
 
-      // Cargar sesión guardada localmente
+      // Cargar sesión
       const savedUser = localStorage.getItem('cps_current_user_v2');
       if (savedUser) setCurrentUser(JSON.parse(savedUser));
 
@@ -136,7 +151,7 @@ export default function App() {
       if (savedTheme !== null) setDarkMode(JSON.parse(savedTheme));
 
     } catch (e) {
-      console.error('Error al conectar con Supabase:', e);
+      console.error('Error al cargar de Supabase:', e);
     } finally {
       setIsDataLoaded(true);
     }
@@ -153,7 +168,6 @@ export default function App() {
     }
   }, [darkMode, isDataLoaded]);
 
-  // Toast Trigger Helper
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => {
@@ -190,7 +204,6 @@ export default function App() {
 
   const isAdmin = currentUser?.role === 'Admin';
 
-  // --- TOGGLE PLATFORMS ---
   const togglePlatform = (platform) => {
     if (!isAdmin) return;
     setVideoFormData((prev) => {
@@ -203,7 +216,6 @@ export default function App() {
     });
   };
 
-  // --- FILE UPLOAD HANDLER ---
   const handleVideoFileUpload = (e) => {
     if (!isAdmin) return;
     const file = e.target.files[0];
@@ -221,39 +233,43 @@ export default function App() {
     }
   };
 
-  // --- CRUD: VIDEOS (SUPABASE CON PREVENCIÓN DE DUPLICADOS) ---
+  // --- CRUD: VIDEOS ---
   const handleVideoSubmit = async (e) => {
     e.preventDefault();
     if (!isAdmin || !videoFormData.title.trim()) return;
 
+    const uniqueId = editingItem 
+      ? editingItem.id 
+      : 'vid_' + Date.now().toString() + '_' + Math.random().toString(36).substring(2, 6);
+
+    const videoPayload = {
+      id: uniqueId,
+      title: videoFormData.title,
+      status: videoFormData.status,
+      notes: videoFormData.notes,
+      platforms: videoFormData.platforms,
+      modelId: videoFormData.modelId,
+      model_id: videoFormData.modelId,
+      targetDate: videoFormData.targetDate,
+      target_date: videoFormData.targetDate,
+      referenceLink: videoFormData.referenceLink,
+      reference_link: videoFormData.referenceLink,
+      mediaUrl: videoFormData.mediaUrl,
+      media_url: videoFormData.mediaUrl,
+      createdAt: editingItem ? (editingItem.createdAt || editingItem.created_at) : new Date().toISOString()
+    };
+
     if (editingItem) {
-      const updated = { ...videoFormData, id: editingItem.id };
       if (supabase) {
-        await supabase.from('videos').update(updated).eq('id', editingItem.id);
+        await supabase.from('videos').update(videoPayload).eq('id', editingItem.id);
       }
-      setVideos((prev) => prev.map((v) => (v.id === editingItem.id ? updated : v)));
+      setVideos((prev) => prev.map((v) => (v.id === editingItem.id ? videoPayload : v)));
       showToast('Vídeo actualizado correctamente');
     } else {
-      // Usar UUID único para evitar repetición de IDs
-      const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID 
-        ? 'vid_' + crypto.randomUUID() 
-        : 'vid_' + Date.now().toString() + '_' + Math.random().toString(36).substring(2, 7);
-
-      const newVideo = {
-        ...videoFormData,
-        id: uniqueId,
-        createdAt: new Date().toISOString()
-      };
-
       if (supabase) {
-        await supabase.from('videos').insert([newVideo]);
+        await supabase.from('videos').insert([videoPayload]);
       }
-      
-      // Asegurarse de que no esté ya en la lista antes de añadirlo
-      setVideos((prev) => {
-        if (prev.some(v => v.id === newVideo.id)) return prev;
-        return [newVideo, ...prev];
-      });
+      setVideos((prev) => [videoPayload, ...prev.filter(v => v.id !== videoPayload.id)]);
       showToast('Nuevo vídeo guardado');
     }
 
@@ -281,7 +297,9 @@ export default function App() {
     setVideoFormData({
       ...item,
       modelId: item.modelId || item.model_id || '',
-      targetDate: item.targetDate || item.target_date || new Date().toISOString().split('T')[0]
+      targetDate: item.targetDate || item.target_date || new Date().toISOString().split('T')[0],
+      referenceLink: item.referenceLink || item.reference_link || '',
+      mediaUrl: item.mediaUrl || item.media_url || ''
     });
     setIsVideoModalOpen(true);
   };
@@ -291,27 +309,35 @@ export default function App() {
     setEditingItem(null);
   };
 
-  // --- CRUD: MODELS (SUPABASE) ---
+  // --- CRUD: MODELS ---
   const handleModelSubmit = async (e) => {
     e.preventDefault();
     if (!isAdmin || !modelFormData.name.trim()) return;
 
+    const modelId = editingModel ? editingModel.id : 'mod_' + Date.now().toString();
+    const modelPayload = {
+      id: modelId,
+      name: modelFormData.name,
+      handle: modelFormData.handle,
+      color: modelFormData.color,
+      notes: modelFormData.notes,
+      avatarUrl: modelFormData.avatarUrl,
+      avatar_url: modelFormData.avatarUrl,
+      socialLink: modelFormData.socialLink,
+      social_link: modelFormData.socialLink
+    };
+
     if (editingModel) {
-      const updated = { ...modelFormData, id: editingModel.id };
       if (supabase) {
-        await supabase.from('models').update(updated).eq('id', editingModel.id);
+        await supabase.from('models').update(modelPayload).eq('id', editingModel.id);
       }
-      setModels(models.map((m) => (m.id === editingModel.id ? updated : m)));
+      setModels(models.map((m) => (m.id === editingModel.id ? modelPayload : m)));
       showToast('Perfil de modelo actualizado');
     } else {
-      const newModel = {
-        ...modelFormData,
-        id: 'mod_' + Date.now().toString()
-      };
       if (supabase) {
-        await supabase.from('models').insert([newModel]);
+        await supabase.from('models').insert([modelPayload]);
       }
-      setModels([...models, newModel]);
+      setModels([...models, modelPayload]);
       showToast('Modelo creada con éxito');
     }
 
@@ -321,7 +347,11 @@ export default function App() {
   const handleEditModel = (model) => {
     if (!isAdmin) return;
     setEditingModel(model);
-    setModelFormData(model);
+    setModelFormData({
+      ...model,
+      avatarUrl: model.avatarUrl || model.avatar_url || '',
+      socialLink: model.socialLink || model.social_link || ''
+    });
     setIsModelModalOpen(true);
   };
 
@@ -331,7 +361,7 @@ export default function App() {
     setModelFormData({ name: '', handle: '', color: '#6366f1', avatarUrl: '', socialLink: '', notes: '' });
   };
 
-  // --- CRUD: USERS (SUPABASE) ---
+  // --- CRUD: USERS ---
   const handleUserSubmit = async (e) => {
     e.preventDefault();
     if (!isAdmin || !userFormData.username.trim() || !userFormData.password.trim()) return;
@@ -382,7 +412,7 @@ export default function App() {
     setUserFormData({ name: '', username: '', password: '', role: 'Lector' });
   };
 
-  // --- ABSOLUTE DELETE EXECUTION ---
+  // --- DELETE EXECUTION ---
   const requestDelete = (type, id, title) => {
     if (!isAdmin) return;
     if (type === 'user' && id === currentUser.id) {
@@ -422,9 +452,8 @@ export default function App() {
     setDeleteConfirm(null);
   };
 
-  // Calculated Maps & Filters (garantizando elementos únicos)
+  // Calculated Filters
   const filteredVideos = useMemo(() => {
-    // Eliminar duplicados garantizados por id
     const uniqueMap = new Map();
     videos.forEach((item) => {
       if (!uniqueMap.has(item.id)) {
@@ -433,9 +462,9 @@ export default function App() {
     });
 
     return Array.from(uniqueMap.values()).filter((item) => {
-      const itemModelId = item.modelId || item.model_id;
-      const matchesModel = selectedModelFilter === 'all' || itemModelId === selectedModelFilter;
-      const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      const itemModelId = String(item.modelId || item.model_id || '');
+      const matchesModel = selectedModelFilter === 'all' || itemModelId === String(selectedModelFilter);
+      const matchesSearch = (item.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                             (item.notes && item.notes.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesModel && matchesSearch;
     });
@@ -443,12 +472,12 @@ export default function App() {
 
   const modelMap = useMemo(() => {
     return models.reduce((acc, m) => {
-      acc[m.id] = m;
+      acc[String(m.id)] = m;
       return acc;
     }, {});
   }, [models]);
 
-  // --- LÓGICA DE GENERACIÓN DE DÍAS PARA CALENDARIO MES ---
+  // --- CALENDAR DAYS ---
   const calendarDays = useMemo(() => {
     const year = currentCalendarDate.getFullYear();
     const month = currentCalendarDate.getMonth();
@@ -464,30 +493,18 @@ export default function App() {
     const prevMonthLastDay = new Date(year, month, 0).getDate();
     for (let i = startDayOfWeek - 1; i >= 0; i--) {
       const dayNum = prevMonthLastDay - i;
-      days.push({
-        dateStr: null,
-        dayNum,
-        isCurrentMonth: false
-      });
+      days.push({ dateStr: null, dayNum, isCurrentMonth: false });
     }
 
     for (let d = 1; d <= lastDayOfMonth.getDate(); d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      days.push({
-        dateStr,
-        dayNum: d,
-        isCurrentMonth: true
-      });
+      days.push({ dateStr, dayNum: d, isCurrentMonth: true });
     }
 
     const totalCells = Math.ceil(days.length / 7) * 7;
     const nextDaysNeeded = totalCells - days.length;
     for (let nd = 1; nd <= nextDaysNeeded; nd++) {
-      days.push({
-        dateStr: null,
-        dayNum: nd,
-        isCurrentMonth: false
-      });
+      days.push({ dateStr: null, dayNum: nd, isCurrentMonth: false });
     }
 
     return days;
@@ -767,9 +784,9 @@ export default function App() {
 
             {(selectedModelFilter === 'all' 
               ? models 
-              : models.filter((m) => m.id === selectedModelFilter)
+              : models.filter((m) => String(m.id) === String(selectedModelFilter))
             ).map((model) => {
-              const modelVideos = filteredVideos.filter((item) => (item.modelId || item.model_id) === model.id);
+              const modelVideos = filteredVideos.filter((item) => String(item.modelId || item.model_id) === String(model.id));
 
               return (
                 <div key={model.id} className={`rounded-2xl border overflow-hidden ${darkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'} shadow-sm`}>
@@ -980,7 +997,7 @@ export default function App() {
 
                     <div className="space-y-1 overflow-y-auto max-h-[70px]">
                       {dayVideos.map((video) => {
-                        const m = modelMap[video.modelId || video.model_id];
+                        const m = modelMap[String(video.modelId || video.model_id)];
                         return (
                           <div
                             key={video.id}
@@ -1123,7 +1140,6 @@ export default function App() {
               <div>
                 <label className="block text-xs font-semibold mb-1 text-slate-300">Borrador o Muestra</label>
                 
-                {/* REPRODUCTOR NATIVO DE VÍDEO SI EXISTE ARCHIVO */}
                 {videoFormData.mediaUrl && (
                   <div className="mb-3 rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-2 space-y-2">
                     <video 
