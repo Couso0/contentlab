@@ -8,9 +8,9 @@ import {
   ChevronLeft, ChevronRight, Download
 } from 'lucide-react';
 
-// Inicializar cliente de Supabase (Usando la llave anon / legacy)
+// Inicializar cliente de Supabase
 const SUPABASE_URL = 'https://eeksouotnjqhfxywfuvh.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVla3NvdW90bmpxaGZ4eXdmdXZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjk3Mzk1NTUsImV4cCI6MjA0NTMxNTU1NX0.eyJzZWNyZXRfa2V5IjoidlF2QXAzc0Fsc1FwUW5RMjAzUGxRdyJ9'; // Reemplazado con tu llave anon oficial
+const SUPABASE_KEY = 'sb_publishable_yn1K0PuqxX6fZehRQBmqAw_wArBvDf_';
 
 const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
@@ -93,7 +93,7 @@ export default function App() {
     role: 'Lector'
   });
 
-  // --- CARGAR DATOS DESDE SUPABASE CON DEPURACIÓN ---
+  // --- CARGAR DATOS DESDE SUPABASE ---
   useEffect(() => {
     fetchCloudData();
   }, []);
@@ -110,43 +110,25 @@ export default function App() {
       if (dbUsers && dbUsers.length > 0) {
         setUsers(dbUsers);
       } else {
+        await supabase.from('app_users').insert(SEED_USERS);
         setUsers(SEED_USERS);
       }
 
       // 2. Cargar Modelos
       const { data: dbModels } = await supabase.from('models').select('*');
       if (dbModels) {
-        const normalizedModels = dbModels.map((m) => ({
-          ...m,
-          id: String(m.id),
-          name: m.name || 'Sin Nombre',
-          avatarUrl: m.avatarUrl || m.avatar_url || '',
-          socialLink: m.socialLink || m.social_link || ''
-        }));
-        setModels(normalizedModels);
+        setModels(dbModels);
       }
 
-      // 3. Cargar Vídeos (Con manejo robusto de errores y registros)
-      const { data: dbVideos, error: videosErr } = await supabase.from('videos').select('*');
-      if (videosErr) {
-        console.error('Error al cargar vídeos de Supabase:', videosErr);
-      }
-      
+      // 3. Cargar Vídeos
+      const { data: dbVideos } = await supabase.from('videos').select('*');
       if (dbVideos) {
-        const normalizedVideos = dbVideos.map((item) => ({
-          ...item,
-          id: String(item.id),
-          modelId: String(item.modelId || item.model_id || ''),
-          targetDate: item.targetDate || item.target_date || new Date().toISOString().split('T')[0],
-          referenceLink: item.referenceLink || item.reference_link || '',
-          mediaUrl: item.mediaUrl || item.media_url || ''
-        }));
-        
-        const uniqueVideos = Array.from(new Map(normalizedVideos.map(item => [item.id, item])).values());
+        // Filtrar duplicados por ID al cargar de la DB
+        const uniqueVideos = Array.from(new Map(dbVideos.map(item => [item.id, item])).values());
         setVideos(uniqueVideos);
       }
 
-      // Cargar sesión
+      // Cargar sesión guardada localmente
       const savedUser = localStorage.getItem('cps_current_user_v2');
       if (savedUser) setCurrentUser(JSON.parse(savedUser));
 
@@ -154,7 +136,7 @@ export default function App() {
       if (savedTheme !== null) setDarkMode(JSON.parse(savedTheme));
 
     } catch (e) {
-      console.error('Excepción al conectar con Supabase:', e);
+      console.error('Error al conectar con Supabase:', e);
     } finally {
       setIsDataLoaded(true);
     }
@@ -171,6 +153,7 @@ export default function App() {
     }
   }, [darkMode, isDataLoaded]);
 
+  // Toast Trigger Helper
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => {
@@ -207,6 +190,7 @@ export default function App() {
 
   const isAdmin = currentUser?.role === 'Admin';
 
+  // --- TOGGLE PLATFORMS ---
   const togglePlatform = (platform) => {
     if (!isAdmin) return;
     setVideoFormData((prev) => {
@@ -219,6 +203,7 @@ export default function App() {
     });
   };
 
+  // --- FILE UPLOAD HANDLER ---
   const handleVideoFileUpload = (e) => {
     if (!isAdmin) return;
     const file = e.target.files[0];
@@ -236,43 +221,39 @@ export default function App() {
     }
   };
 
-  // --- CRUD: VIDEOS ---
+  // --- CRUD: VIDEOS (SUPABASE CON PREVENCIÓN DE DUPLICADOS) ---
   const handleVideoSubmit = async (e) => {
     e.preventDefault();
     if (!isAdmin || !videoFormData.title.trim()) return;
 
-    const uniqueId = editingItem 
-      ? editingItem.id 
-      : 'vid_' + Date.now().toString() + '_' + Math.random().toString(36).substring(2, 6);
-
-    const videoPayload = {
-      id: uniqueId,
-      title: videoFormData.title,
-      status: videoFormData.status,
-      notes: videoFormData.notes,
-      platforms: videoFormData.platforms,
-      modelId: videoFormData.modelId,
-      model_id: videoFormData.modelId,
-      targetDate: videoFormData.targetDate,
-      target_date: videoFormData.targetDate,
-      referenceLink: videoFormData.referenceLink,
-      reference_link: videoFormData.referenceLink,
-      mediaUrl: videoFormData.mediaUrl,
-      media_url: videoFormData.mediaUrl,
-      createdAt: editingItem ? (editingItem.createdAt || editingItem.created_at) : new Date().toISOString()
-    };
-
     if (editingItem) {
+      const updated = { ...videoFormData, id: editingItem.id };
       if (supabase) {
-        await supabase.from('videos').update(videoPayload).eq('id', editingItem.id);
+        await supabase.from('videos').update(updated).eq('id', editingItem.id);
       }
-      setVideos((prev) => prev.map((v) => (v.id === editingItem.id ? videoPayload : v)));
+      setVideos((prev) => prev.map((v) => (v.id === editingItem.id ? updated : v)));
       showToast('Vídeo actualizado correctamente');
     } else {
+      // Usar UUID único para evitar repetición de IDs
+      const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID 
+        ? 'vid_' + crypto.randomUUID() 
+        : 'vid_' + Date.now().toString() + '_' + Math.random().toString(36).substring(2, 7);
+
+      const newVideo = {
+        ...videoFormData,
+        id: uniqueId,
+        createdAt: new Date().toISOString()
+      };
+
       if (supabase) {
-        await supabase.from('videos').insert([videoPayload]);
+        await supabase.from('videos').insert([newVideo]);
       }
-      setVideos((prev) => [videoPayload, ...prev.filter(v => v.id !== videoPayload.id)]);
+      
+      // Asegurarse de que no esté ya en la lista antes de añadirlo
+      setVideos((prev) => {
+        if (prev.some(v => v.id === newVideo.id)) return prev;
+        return [newVideo, ...prev];
+      });
       showToast('Nuevo vídeo guardado');
     }
 
@@ -300,9 +281,7 @@ export default function App() {
     setVideoFormData({
       ...item,
       modelId: item.modelId || item.model_id || '',
-      targetDate: item.targetDate || item.target_date || new Date().toISOString().split('T')[0],
-      referenceLink: item.referenceLink || item.reference_link || '',
-      mediaUrl: item.mediaUrl || item.media_url || ''
+      targetDate: item.targetDate || item.target_date || new Date().toISOString().split('T')[0]
     });
     setIsVideoModalOpen(true);
   };
@@ -312,35 +291,27 @@ export default function App() {
     setEditingItem(null);
   };
 
-  // --- CRUD: MODELS ---
+  // --- CRUD: MODELS (SUPABASE) ---
   const handleModelSubmit = async (e) => {
     e.preventDefault();
     if (!isAdmin || !modelFormData.name.trim()) return;
 
-    const modelId = editingModel ? editingModel.id : 'mod_' + Date.now().toString();
-    const modelPayload = {
-      id: modelId,
-      name: modelFormData.name,
-      handle: modelFormData.handle,
-      color: modelFormData.color,
-      notes: modelFormData.notes,
-      avatarUrl: modelFormData.avatarUrl,
-      avatar_url: modelFormData.avatarUrl,
-      socialLink: modelFormData.socialLink,
-      social_link: modelFormData.socialLink
-    };
-
     if (editingModel) {
+      const updated = { ...modelFormData, id: editingModel.id };
       if (supabase) {
-        await supabase.from('models').update(modelPayload).eq('id', editingModel.id);
+        await supabase.from('models').update(updated).eq('id', editingModel.id);
       }
-      setModels(models.map((m) => (m.id === editingModel.id ? modelPayload : m)));
+      setModels(models.map((m) => (m.id === editingModel.id ? updated : m)));
       showToast('Perfil de modelo actualizado');
     } else {
+      const newModel = {
+        ...modelFormData,
+        id: 'mod_' + Date.now().toString()
+      };
       if (supabase) {
-        await supabase.from('models').insert([modelPayload]);
+        await supabase.from('models').insert([newModel]);
       }
-      setModels([...models, modelPayload]);
+      setModels([...models, newModel]);
       showToast('Modelo creada con éxito');
     }
 
@@ -350,11 +321,7 @@ export default function App() {
   const handleEditModel = (model) => {
     if (!isAdmin) return;
     setEditingModel(model);
-    setModelFormData({
-      ...model,
-      avatarUrl: model.avatarUrl || model.avatar_url || '',
-      socialLink: model.socialLink || model.social_link || ''
-    });
+    setModelFormData(model);
     setIsModelModalOpen(true);
   };
 
@@ -364,7 +331,7 @@ export default function App() {
     setModelFormData({ name: '', handle: '', color: '#6366f1', avatarUrl: '', socialLink: '', notes: '' });
   };
 
-  // --- CRUD: USERS ---
+  // --- CRUD: USERS (SUPABASE) ---
   const handleUserSubmit = async (e) => {
     e.preventDefault();
     if (!isAdmin || !userFormData.username.trim() || !userFormData.password.trim()) return;
@@ -415,7 +382,7 @@ export default function App() {
     setUserFormData({ name: '', username: '', password: '', role: 'Lector' });
   };
 
-  // --- DELETE EXECUTION ---
+  // --- ABSOLUTE DELETE EXECUTION ---
   const requestDelete = (type, id, title) => {
     if (!isAdmin) return;
     if (type === 'user' && id === currentUser.id) {
@@ -455,8 +422,9 @@ export default function App() {
     setDeleteConfirm(null);
   };
 
-  // Calculated Filters
+  // Calculated Maps & Filters (garantizando elementos únicos)
   const filteredVideos = useMemo(() => {
+    // Eliminar duplicados garantizados por id
     const uniqueMap = new Map();
     videos.forEach((item) => {
       if (!uniqueMap.has(item.id)) {
@@ -465,9 +433,9 @@ export default function App() {
     });
 
     return Array.from(uniqueMap.values()).filter((item) => {
-      const itemModelId = String(item.modelId || item.model_id || '');
-      const matchesModel = selectedModelFilter === 'all' || itemModelId === String(selectedModelFilter);
-      const matchesSearch = (item.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      const itemModelId = item.modelId || item.model_id;
+      const matchesModel = selectedModelFilter === 'all' || itemModelId === selectedModelFilter;
+      const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             (item.notes && item.notes.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesModel && matchesSearch;
     });
@@ -475,12 +443,12 @@ export default function App() {
 
   const modelMap = useMemo(() => {
     return models.reduce((acc, m) => {
-      acc[String(m.id)] = m;
+      acc[m.id] = m;
       return acc;
     }, {});
   }, [models]);
 
-  // --- CALENDAR DAYS ---
+  // --- LÓGICA DE GENERACIÓN DE DÍAS PARA CALENDARIO MES ---
   const calendarDays = useMemo(() => {
     const year = currentCalendarDate.getFullYear();
     const month = currentCalendarDate.getMonth();
@@ -496,18 +464,30 @@ export default function App() {
     const prevMonthLastDay = new Date(year, month, 0).getDate();
     for (let i = startDayOfWeek - 1; i >= 0; i--) {
       const dayNum = prevMonthLastDay - i;
-      days.push({ dateStr: null, dayNum, isCurrentMonth: false });
+      days.push({
+        dateStr: null,
+        dayNum,
+        isCurrentMonth: false
+      });
     }
 
     for (let d = 1; d <= lastDayOfMonth.getDate(); d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      days.push({ dateStr, dayNum: d, isCurrentMonth: true });
+      days.push({
+        dateStr,
+        dayNum: d,
+        isCurrentMonth: true
+      });
     }
 
     const totalCells = Math.ceil(days.length / 7) * 7;
     const nextDaysNeeded = totalCells - days.length;
     for (let nd = 1; nd <= nextDaysNeeded; nd++) {
-      days.push({ dateStr: null, dayNum: nd, isCurrentMonth: false });
+      days.push({
+        dateStr: null,
+        dayNum: nd,
+        isCurrentMonth: false
+      });
     }
 
     return days;
@@ -787,9 +767,9 @@ export default function App() {
 
             {(selectedModelFilter === 'all' 
               ? models 
-              : models.filter((m) => String(m.id) === String(selectedModelFilter))
+              : models.filter((m) => m.id === selectedModelFilter)
             ).map((model) => {
-              const modelVideos = filteredVideos.filter((item) => String(item.modelId || item.model_id) === String(model.id));
+              const modelVideos = filteredVideos.filter((item) => (item.modelId || item.model_id) === model.id);
 
               return (
                 <div key={model.id} className={`rounded-2xl border overflow-hidden ${darkMode ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'} shadow-sm`}>
@@ -1000,7 +980,7 @@ export default function App() {
 
                     <div className="space-y-1 overflow-y-auto max-h-[70px]">
                       {dayVideos.map((video) => {
-                        const m = modelMap[String(video.modelId || video.model_id)];
+                        const m = modelMap[video.modelId || video.model_id];
                         return (
                           <div
                             key={video.id}
@@ -1143,6 +1123,7 @@ export default function App() {
               <div>
                 <label className="block text-xs font-semibold mb-1 text-slate-300">Borrador o Muestra</label>
                 
+                {/* REPRODUCTOR NATIVO DE VÍDEO SI EXISTE ARCHIVO */}
                 {videoFormData.mediaUrl && (
                   <div className="mb-3 rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-2 space-y-2">
                     <video 
