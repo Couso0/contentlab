@@ -116,7 +116,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         getAppUsers(),
       ]);
       setModels(fetchedModels);
-      setVideos(fetchedVideos);
+
+      // Limpiar videos que no pertenezcan a ningún modelo actual
+      const modelIdSet = new Set(fetchedModels.map((m) => m.id));
+      const cleanVideos = fetchedVideos.filter((v) => modelIdSet.has(v.model_id));
+      setVideos(cleanVideos);
+
+      if (cleanVideos.length !== fetchedVideos.length) {
+        localStorage.setItem('studio_planner_videos_cache', JSON.stringify(cleanVideos));
+      }
+
       setUsers(fetchedUsers);
     } catch (e) {
       console.error('Error fetching data:', e);

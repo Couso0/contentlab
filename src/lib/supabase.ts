@@ -104,7 +104,7 @@ export const getModels = async (): Promise<Model[]> => {
   if (client) {
     try {
       const { data, error } = await client.from('models').select('*').order('created_at', { ascending: true });
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         localStorage.setItem(STORAGE_MODELS_KEY, JSON.stringify(data));
         return data;
       }
@@ -185,6 +185,19 @@ export const deleteModel = async (id: string): Promise<boolean> => {
   const current = await getModels();
   const updated = current.filter((m) => m.id !== id);
   localStorage.setItem(STORAGE_MODELS_KEY, JSON.stringify(updated));
+
+  // Limpiar también los videos asociados a este modelo en la caché local
+  const cachedVideos = localStorage.getItem(STORAGE_VIDEOS_KEY);
+  if (cachedVideos) {
+    try {
+      const parsed: VideoItem[] = JSON.parse(cachedVideos);
+      const cleanVideos = parsed.filter((v) => v.model_id !== id);
+      localStorage.setItem(STORAGE_VIDEOS_KEY, JSON.stringify(cleanVideos));
+    } catch {
+      // Ignorar error de parseo
+    }
+  }
+
   return true;
 };
 
@@ -201,7 +214,7 @@ export const getVideos = async (): Promise<VideoItem[]> => {
         .select('*')
         .order('planned_date', { ascending: true });
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         localStorage.setItem(STORAGE_VIDEOS_KEY, JSON.stringify(data));
         return data;
       }
@@ -363,6 +376,52 @@ export const uploadVideoToStorage = async (
     url: localUrl,
     error: null,
   };
+};
+
+export const uploadAvatarToStorage = async (
+  file: File
+): Promise<{ url: string | null; error: string | null }> => {
+  // Validación de tamaño (máx 10MB)
+  if (file.size > 10 * 1024 * 1024) {
+    return { url: null, error: 'La imagen excede el límite de 10MB.' };
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const fileName = `avatars/${crypto.randomUUID()}.${ext}`;
+
+      const { data, error } = await client.storage
+        .from('videos')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+      if (!error && data) {
+        const { data: publicUrlData } = client.storage
+          .from('videos')
+          .getPublicUrl(data.path);
+        return { url: publicUrlData.publicUrl, error: null };
+      }
+    } catch (err) {
+      console.warn('Error subiendo avatar a Supabase Storage, convirtiendo a DataURL:', err);
+    }
+  }
+
+  // Fallback: Convertir a Data URL (base64) permanente para persistencia local
+  try {
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (e) => reject(e);
+    });
+    return { url: base64, error: null };
+  } catch (err: any) {
+    return { url: null, error: err?.message || 'Error al procesar la imagen' };
+  }
 };
 
 // =========================================================================

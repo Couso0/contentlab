@@ -1,9 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ChevronDown, Check, Users } from 'lucide-react';
+import { ChevronDown, Check, Users, Plus } from 'lucide-react';
 
 export const ModelDropdown: React.FC = () => {
-  const { models, selectedModelId, setSelectedModelId, videos } = useApp();
+  const {
+    models,
+    selectedModelId,
+    setSelectedModelId,
+    videos,
+    userRole,
+    setActiveModel,
+    setIsModelModalOpen,
+  } = useApp();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -32,6 +40,8 @@ export const ModelDropdown: React.FC = () => {
     setSelectedModelId(id);
     setIsOpen(false);
   };
+
+  const validVideosCount = videos.filter((v) => models.some((m) => m.id === v.model_id)).length;
 
   return (
     <div className="custom-dropdown-container" ref={dropdownRef}>
@@ -87,7 +97,9 @@ export const ModelDropdown: React.FC = () => {
             </div>
             <div className="item-details">
               <span className="item-title">Todas las Modelos</span>
-              <span className="item-subtitle">{videos.length} videos totales</span>
+              <span className="item-subtitle">
+                {validVideosCount} {validVideosCount === 1 ? 'video total' : 'videos totales'}
+              </span>
             </div>
             {selectedModelId === 'all' && <Check size={16} className="item-check" />}
           </div>
@@ -119,7 +131,7 @@ export const ModelDropdown: React.FC = () => {
                       <span className="item-platform-badge">{model.platform || 'Instagram'}</span>
                     </div>
                     <span className="item-subtitle">
-                      {model.handle || '@creadora'} • {modelVideosCount} videos
+                      {model.handle || '@creadora'} • {modelVideosCount} {modelVideosCount === 1 ? 'video' : 'videos'}
                     </span>
                   </div>
                   {isSelected && <Check size={16} className="item-check" />}
@@ -127,6 +139,37 @@ export const ModelDropdown: React.FC = () => {
               );
             })}
           </div>
+
+          {/* Acción para Administrador: Agregar Nueva Creadora */}
+          {userRole === 'admin' && (
+            <>
+              <div className="dropdown-divider" />
+              <div
+                className="dropdown-item"
+                style={{ cursor: 'pointer', color: 'var(--primary)' }}
+                onClick={() => {
+                  setIsOpen(false);
+                  setActiveModel(null);
+                  setIsModelModalOpen(true);
+                }}
+              >
+                <div
+                  className="item-icon-box"
+                  style={{
+                    background: 'rgba(139, 92, 246, 0.15)',
+                    color: 'var(--primary)',
+                  }}
+                >
+                  <Plus size={16} strokeWidth={2.4} />
+                </div>
+                <div className="item-details">
+                  <span className="item-title" style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                    + Agregar Creadora
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

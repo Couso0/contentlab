@@ -110,19 +110,56 @@ export const ModelsView: React.FC = () => {
                   gap: '12px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <img
-                    src={model.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                    alt={model.name}
-                    style={{
-                      width: '52px',
-                      height: '52px',
-                      borderRadius: '50%',
-                      objectFit: 'cover',
-                      border: '2px solid var(--primary)',
-                      boxShadow: '0 0 12px rgba(139, 92, 246, 0.3)',
-                    }}
-                  />
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    cursor: userRole === 'admin' ? 'pointer' : 'default',
+                  }}
+                  onClick={() => {
+                    if (userRole === 'admin') {
+                      setActiveModel(model);
+                      setIsModelModalOpen(true);
+                    }
+                  }}
+                  title={userRole === 'admin' ? 'Haz clic para editar nombre y foto de perfil' : undefined}
+                >
+                  <div style={{ position: 'relative' }}>
+                    <img
+                      src={model.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
+                      alt={model.name}
+                      style={{
+                        width: '54px',
+                        height: '54px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: '2px solid var(--primary)',
+                        boxShadow: '0 0 12px rgba(139, 92, 246, 0.3)',
+                        display: 'block',
+                      }}
+                    />
+                    {userRole === 'admin' && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: '-2px',
+                          right: '-2px',
+                          background: 'var(--primary)',
+                          borderRadius: '50%',
+                          width: '20px',
+                          height: '20px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#ffffff',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+                        }}
+                      >
+                        <Edit2 size={10} />
+                      </div>
+                    )}
+                  </div>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -143,7 +180,7 @@ export const ModelsView: React.FC = () => {
                       </span>
                     </div>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      {model.handle || '@creadora'} • {modelVideos.length} videos programados
+                      {model.handle || '@creadora'} • {modelVideos.length} {modelVideos.length === 1 ? 'video programado' : 'videos programados'}
                     </p>
                   </div>
                 </div>
@@ -156,7 +193,7 @@ export const ModelsView: React.FC = () => {
                         setActiveModel(model);
                         setIsModelModalOpen(true);
                       }}
-                      title="Editar perfil de modelo"
+                      title="Editar nombre, foto o datos de la creadora"
                     >
                       <Edit2 size={15} />
                     </button>
