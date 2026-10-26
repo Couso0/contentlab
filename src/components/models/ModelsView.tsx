@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Plus, Edit2, Calendar, Sparkles, Play } from 'lucide-react';
+import { Plus, Edit2, Calendar, Sparkles, Play, Smartphone } from 'lucide-react';
+import { ModelCardAccountDropdown } from './ModelCardAccountDropdown';
 
 export const ModelsView: React.FC = () => {
   const {
@@ -8,6 +9,9 @@ export const ModelsView: React.FC = () => {
     videos,
     selectedModelId,
     setSelectedModelId,
+    selectedAccountId,
+    setSelectedAccountId,
+    setPreselectedAccountId,
     setActiveVideo,
     setIsCreateVideoOpen,
     setPreselectedDate,
@@ -15,6 +19,9 @@ export const ModelsView: React.FC = () => {
     setIsModelModalOpen,
     userRole,
   } = useApp();
+
+  // Estado para la cuenta seleccionada en cada tarjeta de modelo individual
+  const [modelAccountFilters, setModelAccountFilters] = useState<Record<string, string>>({});
 
   // Filtrar modelos según selección del header
   const displayedModels = models.filter((m) =>
@@ -38,8 +45,13 @@ export const ModelsView: React.FC = () => {
     }
   };
 
-  const handleAddVideoForModel = (modelId: string) => {
+  const handleAddVideoForModel = (modelId: string, accountId?: string) => {
     setSelectedModelId(modelId);
+    if (accountId && accountId !== 'all') {
+      setPreselectedAccountId(accountId);
+    } else {
+      setPreselectedAccountId(null);
+    }
     const today = new Date().toISOString().split('T')[0];
     setPreselectedDate(today);
     setIsCreateVideoOpen(true);
@@ -84,7 +96,17 @@ export const ModelsView: React.FC = () => {
       {/* Contenedor de Creadoras */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
         {displayedModels.map((model) => {
-          const modelVideos = videos.filter((v) => v.model_id === model.id);
+          const currentAccountId =
+            modelAccountFilters[model.id] ||
+            (selectedModelId === model.id && selectedAccountId !== 'all' ? selectedAccountId : 'all');
+
+          const allModelVideos = videos.filter((v) => v.model_id === model.id);
+          const displayedModelVideos = allModelVideos.filter((v) => {
+            if (currentAccountId === 'all') return true;
+            return v.account_id === currentAccountId;
+          });
+
+          const activeAccount = model.accounts?.find((a) => a.id === currentAccountId);
 
           return (
             <div
@@ -123,7 +145,7 @@ export const ModelsView: React.FC = () => {
                       setIsModelModalOpen(true);
                     }
                   }}
-                  title={userRole === 'admin' ? 'Haz clic para editar nombre y foto de perfil' : undefined}
+                  title={userRole === 'admin' ? 'Haz clic para editar nombre, cuentas y datos' : undefined}
                 >
                   <div style={{ position: 'relative' }}>
                     <img
@@ -161,7 +183,7 @@ export const ModelsView: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                       <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                         {model.name}
                       </h3>
@@ -176,16 +198,53 @@ export const ModelsView: React.FC = () => {
                           fontWeight: 600,
                         }}
                       >
-                        {model.platform || 'Instagram'}
+                        {activeAccount ? activeAccount.platform : model.platform || 'Instagram'}
                       </span>
+                      {model.accounts && model.accounts.length > 1 && (
+                        <span
+                          style={{
+                            fontSize: '0.68rem',
+                            padding: '2px 7px',
+                            borderRadius: '10px',
+                            background: 'rgba(56, 189, 248, 0.12)',
+                            color: '#38bdf8',
+                            border: '1px solid rgba(56, 189, 248, 0.25)',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {model.accounts.length} cuentas
+                        </span>
+                      )}
                     </div>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      {model.handle || '@creadora'} • {modelVideos.length} {modelVideos.length === 1 ? 'video programado' : 'videos programados'}
+                      {activeAccount
+                        ? `Cuenta: ${activeAccount.handle || activeAccount.name} (${activeAccount.platform}) • ${displayedModelVideos.length} ${displayedModelVideos.length === 1 ? 'video' : 'videos'}`
+                        : `${model.handle || '@creadora'} • ${allModelVideos.length} ${allModelVideos.length === 1 ? 'video programado' : 'videos programados'}`}
                     </p>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {/* Acciones de la Modelo: Selector de Cuentas y Botones */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  {/* MENÚ DESPLEGABLE DE CUENTAS EN CADA MODELO */}
+                  <ModelCardAccountDropdown
+                    model={model}
+                    selectedAccountId={currentAccountId}
+                    onSelectAccount={(accId) => {
+                      setModelAccountFilters((prev) => ({ ...prev, [model.id]: accId }));
+                      if (selectedModelId === model.id) {
+                        setSelectedAccountId(accId);
+                      }
+                    }}
+                    totalVideosCount={allModelVideos.length}
+                    modelVideos={allModelVideos}
+                    onOpenManageAccounts={() => {
+                      setActiveModel(model);
+                      setIsModelModalOpen(true);
+                    }}
+                    userRole={userRole}
+                  />
+
                   {userRole === 'admin' && (
                     <button
                       className="icon-btn"
@@ -193,7 +252,7 @@ export const ModelsView: React.FC = () => {
                         setActiveModel(model);
                         setIsModelModalOpen(true);
                       }}
-                      title="Editar nombre, foto o datos de la creadora"
+                      title="Editar nombre, cuentas y datos de la creadora"
                     >
                       <Edit2 size={15} />
                     </button>
@@ -201,7 +260,7 @@ export const ModelsView: React.FC = () => {
                   {userRole === 'admin' && (
                     <button
                       className="btn-secondary"
-                      onClick={() => handleAddVideoForModel(model.id)}
+                      onClick={() => handleAddVideoForModel(model.id, currentAccountId !== 'all' ? currentAccountId : undefined)}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                     >
                       <Plus size={15} />
@@ -212,7 +271,7 @@ export const ModelsView: React.FC = () => {
               </div>
 
               {/* Grid de Videos de esta Modelo */}
-              {modelVideos.length > 0 ? (
+              {displayedModelVideos.length > 0 ? (
                 <div
                   style={{
                     display: 'grid',
@@ -220,8 +279,9 @@ export const ModelsView: React.FC = () => {
                     gap: '16px',
                   }}
                 >
-                  {modelVideos.map((video) => {
+                  {displayedModelVideos.map((video) => {
                     const statusColor = getStatusColor(video.status);
+                    const videoAccount = model.accounts?.find((a) => a.id === video.account_id);
 
                     return (
                       <div
@@ -365,7 +425,13 @@ export const ModelsView: React.FC = () => {
                               {video.status}
                             </span>
 
-                            <div style={{ display: 'flex', gap: '4px' }}>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                              {videoAccount && (
+                                <span className="video-card-account-badge" title={`Cuenta: ${videoAccount.handle} (${videoAccount.platform})`}>
+                                  <Smartphone size={10} />
+                                  <span>{videoAccount.handle}</span>
+                                </span>
+                              )}
                               {video.platforms.map((p) => (
                                 <span
                                   key={p}
@@ -399,17 +465,36 @@ export const ModelsView: React.FC = () => {
                 >
                   <Sparkles size={24} color="var(--primary)" style={{ margin: '0 auto 8px' }} />
                   <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-                    No hay videos planificados para {model.name} todavía.
+                    {allModelVideos.length > 0
+                      ? `No hay videos programados para la cuenta seleccionada.`
+                      : `No hay videos planificados para ${model.name} todavía.`}
                   </p>
-                  {userRole === 'admin' && (
-                    <button
-                      className="btn-secondary"
-                      style={{ marginTop: '12px', fontSize: '0.78rem' }}
-                      onClick={() => handleAddVideoForModel(model.id)}
-                    >
-                      + Programar Primer Video
-                    </button>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '12px' }}>
+                    {currentAccountId !== 'all' && (
+                      <button
+                        className="btn-secondary"
+                        style={{ fontSize: '0.78rem' }}
+                        onClick={() => {
+                          setModelAccountFilters((prev) => ({ ...prev, [model.id]: 'all' }));
+                          if (selectedModelId === model.id) {
+                            setSelectedAccountId('all');
+                          }
+                        }}
+                      >
+                        Ver todas las cuentas
+                      </button>
+                    )}
+                    {userRole === 'admin' && (
+                      <button
+                        className="btn-primary-gradient"
+                        style={{ fontSize: '0.78rem', padding: '6px 14px' }}
+                        onClick={() => handleAddVideoForModel(model.id, currentAccountId !== 'all' ? currentAccountId : undefined)}
+                      >
+                        <Plus size={14} />
+                        <span>Programar Video</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

@@ -76,6 +76,7 @@ export const DayCell: React.FC<DayCellProps> = ({
         {videos.map((video) => {
           const model = modelsMap.get(video.model_id);
           const modelName = model ? model.name.split(' ')[0] : 'MODELO';
+          const account = model?.accounts?.find((a) => a.id === video.account_id);
           const statusColor = getStatusColor(video.status);
 
           return (
@@ -87,11 +88,14 @@ export const DayCell: React.FC<DayCellProps> = ({
                 e.stopPropagation();
                 setActiveVideo(video);
               }}
-              title={`${video.title} - ${video.status} (${model?.name || ''})`}
+              title={`${video.title} - ${video.status} (${model?.name || ''}${account ? ` • ${account.handle}` : ''})`}
             >
               <span className="video-chip-title">{video.title}</span>
               <div className="video-chip-meta">
-                <span className="video-chip-model">{modelName}</span>
+                <span className="video-chip-model">
+                  {modelName}
+                  {account ? ` • ${account.handle}` : ''}
+                </span>
                 <span
                   className="status-dot-sm"
                   style={{ backgroundColor: statusColor, boxShadow: `0 0 5px ${statusColor}` }}

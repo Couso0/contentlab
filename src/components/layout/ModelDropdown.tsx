@@ -131,7 +131,7 @@ export const ModelDropdown: React.FC = () => {
                       <span className="item-platform-badge">{model.platform || 'Instagram'}</span>
                     </div>
                     <span className="item-subtitle">
-                      {model.handle || '@creadora'} • {modelVideosCount} {modelVideosCount === 1 ? 'video' : 'videos'}
+                      {model.accounts && model.accounts.length > 1 ? `${model.accounts.length} cuentas` : model.handle || '@creadora'} • {modelVideosCount} {modelVideosCount === 1 ? 'video' : 'videos'}
                     </span>
                   </div>
                   {isSelected && <Check size={16} className="item-check" />}

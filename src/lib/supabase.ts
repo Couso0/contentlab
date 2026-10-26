@@ -1,6 +1,44 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Model, VideoItem, AppUser, UserRole } from '../types';
+import type { Model, VideoItem, AppUser, UserRole, ModelAccount } from '../types';
 import { INITIAL_MODELS, INITIAL_VIDEOS } from './mockData';
+
+// Helper para garantizar que todo modelo tenga al menos una cuenta configurada
+export const getModelAccounts = (model: Model): ModelAccount[] => {
+  if (model.accounts && Array.isArray(model.accounts) && model.accounts.length > 0) {
+    return model.accounts;
+  }
+  const initial = INITIAL_MODELS.find(
+    (im) => im.id === model.id || im.name.trim().toLowerCase() === model.name.trim().toLowerCase()
+  );
+  if (initial?.accounts && initial.accounts.length > 0) {
+    return initial.accounts;
+  }
+  return [
+    {
+      id: `${model.id}_main`,
+      name: 'Cuenta Principal',
+      handle: model.handle || `@${model.name.toLowerCase().replace(/\s+/g, '')}`,
+      platform: model.platform || 'Instagram',
+      is_primary: true,
+    },
+  ];
+};
+
+export const normalizeModel = (model: Model): Model => ({
+  ...model,
+  accounts: getModelAccounts(model),
+});
+
+export const normalizeVideo = (video: VideoItem): VideoItem => {
+  if (video.account_id) return video;
+  const initial = INITIAL_VIDEOS.find(
+    (iv) => iv.id === video.id || iv.title.trim().toLowerCase() === video.title.trim().toLowerCase()
+  );
+  if (initial?.account_id) {
+    return { ...video, account_id: initial.account_id };
+  }
+  return video;
+};
 
 // Claves de almacenamiento local para persistencia y configuración dinámica
 const CONFIG_KEY_URL = 'studio_planner_supabase_url';
@@ -105,8 +143,9 @@ export const getModels = async (): Promise<Model[]> => {
     try {
       const { data, error } = await client.from('models').select('*').order('created_at', { ascending: true });
       if (!error && data) {
-        localStorage.setItem(STORAGE_MODELS_KEY, JSON.stringify(data));
-        return data;
+        const normalized = data.map(normalizeModel);
+        localStorage.setItem(STORAGE_MODELS_KEY, JSON.stringify(normalized));
+        return normalized;
       }
     } catch (err) {
       console.warn('Supabase fetch models falló, usando caché local', err);
@@ -117,41 +156,48 @@ export const getModels = async (): Promise<Model[]> => {
   const cached = localStorage.getItem(STORAGE_MODELS_KEY);
   if (cached) {
     try {
-      return JSON.parse(cached);
+      const parsed: Model[] = JSON.parse(cached);
+      return parsed.map(normalizeModel);
     } catch {
       // Ignorar error de parseo
     }
   }
-  localStorage.setItem(STORAGE_MODELS_KEY, JSON.stringify(INITIAL_MODELS));
-  return INITIAL_MODELS;
+  const defaultModels = INITIAL_MODELS.map(normalizeModel);
+  localStorage.setItem(STORAGE_MODELS_KEY, JSON.stringify(defaultModels));
+  return defaultModels;
 };
 
 export const saveModel = async (model: Omit<Model, 'id' | 'created_at'> & { id?: string }): Promise<Model> => {
   const client = getSupabaseClient();
   const id = model.id || crypto.randomUUID();
-  const fullModel: Model = {
+  const fullModel: Model = normalizeModel({
     ...model,
     id,
     created_at: new Date().toISOString(),
-  };
+  });
 
   if (client) {
     try {
+      const payload: any = {
+        id: fullModel.id,
+        name: fullModel.name,
+        handle: fullModel.handle,
+        platform: fullModel.platform,
+        avatar_url: fullModel.avatar_url,
+        notes: fullModel.notes,
+      };
+      if (fullModel.accounts && fullModel.accounts.length > 0) {
+        payload.accounts = fullModel.accounts;
+      }
+
       const { data, error } = await client
         .from('models')
-        .upsert({
-          id: fullModel.id,
-          name: fullModel.name,
-          handle: fullModel.handle,
-          platform: fullModel.platform,
-          avatar_url: fullModel.avatar_url,
-          notes: fullModel.notes,
-        })
+        .upsert(payload)
         .select()
         .single();
 
       if (!error && data) {
-        return data;
+        return normalizeModel(data);
       }
     } catch (err) {
       console.warn('Error al guardar modelo en Supabase:', err);
@@ -215,8 +261,9 @@ export const getVideos = async (): Promise<VideoItem[]> => {
         .order('planned_date', { ascending: true });
 
       if (!error && data) {
-        localStorage.setItem(STORAGE_VIDEOS_KEY, JSON.stringify(data));
-        return data;
+        const normalized = data.map(normalizeVideo);
+        localStorage.setItem(STORAGE_VIDEOS_KEY, JSON.stringify(normalized));
+        return normalized;
       }
     } catch (err) {
       console.warn('Supabase fetch videos falló, usando datos locales', err);
@@ -227,13 +274,15 @@ export const getVideos = async (): Promise<VideoItem[]> => {
   const cached = localStorage.getItem(STORAGE_VIDEOS_KEY);
   if (cached) {
     try {
-      return JSON.parse(cached);
+      const parsed: VideoItem[] = JSON.parse(cached);
+      return parsed.map(normalizeVideo);
     } catch {
       // Ignorar error
     }
   }
-  localStorage.setItem(STORAGE_VIDEOS_KEY, JSON.stringify(INITIAL_VIDEOS));
-  return INITIAL_VIDEOS;
+  const defaultVideos = INITIAL_VIDEOS.map(normalizeVideo);
+  localStorage.setItem(STORAGE_VIDEOS_KEY, JSON.stringify(defaultVideos));
+  return defaultVideos;
 };
 
 export const saveVideo = async (video: Partial<VideoItem> & { model_id: string; title: string; planned_date: string }): Promise<VideoItem> => {
@@ -242,6 +291,7 @@ export const saveVideo = async (video: Partial<VideoItem> & { model_id: string; 
   const fullVideo: VideoItem = {
     id,
     model_id: video.model_id,
+    account_id: video.account_id,
     title: video.title,
     reference_url: video.reference_url || '',
     video_url: video.video_url || '',
@@ -255,20 +305,25 @@ export const saveVideo = async (video: Partial<VideoItem> & { model_id: string; 
 
   if (client) {
     try {
+      const payload: any = {
+        id: fullVideo.id,
+        model_id: fullVideo.model_id,
+        title: fullVideo.title,
+        reference_url: fullVideo.reference_url,
+        video_url: fullVideo.video_url,
+        status: fullVideo.status,
+        planned_date: fullVideo.planned_date,
+        platforms: fullVideo.platforms,
+        notes: fullVideo.notes,
+        updated_at: fullVideo.updated_at,
+      };
+      if (fullVideo.account_id) {
+        payload.account_id = fullVideo.account_id;
+      }
+
       const { data, error } = await client
         .from('videos')
-        .upsert({
-          id: fullVideo.id,
-          model_id: fullVideo.model_id,
-          title: fullVideo.title,
-          reference_url: fullVideo.reference_url,
-          video_url: fullVideo.video_url,
-          status: fullVideo.status,
-          planned_date: fullVideo.planned_date,
-          platforms: fullVideo.platforms,
-          notes: fullVideo.notes,
-          updated_at: fullVideo.updated_at,
-        })
+        .upsert(payload)
         .select()
         .single();
 

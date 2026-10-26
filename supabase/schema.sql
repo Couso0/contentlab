@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.app_users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
--- 3. Tabla de Modelos / Creadoras
+-- 3. Tabla de Modelos / Creadoras (con soporte para múltiples cuentas)
 CREATE TABLE IF NOT EXISTS public.models (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
@@ -28,13 +28,18 @@ CREATE TABLE IF NOT EXISTS public.models (
     platform TEXT DEFAULT 'Instagram',
     avatar_url TEXT,
     notes TEXT,
+    accounts JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
--- 4. Tabla de Videos / Contenido
+-- Si la tabla ya existía, asegurarse de tener la columna accounts:
+ALTER TABLE public.models ADD COLUMN IF NOT EXISTS accounts JSONB DEFAULT '[]'::jsonb;
+
+-- 4. Tabla de Videos / Contenido (vinculada a cuenta opcional de la modelo)
 CREATE TABLE IF NOT EXISTS public.videos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     model_id UUID REFERENCES public.models(id) ON DELETE CASCADE,
+    account_id TEXT,
     title TEXT NOT NULL,
     reference_url TEXT,
     video_url TEXT,
@@ -45,6 +50,9 @@ CREATE TABLE IF NOT EXISTS public.videos (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
+
+-- Si la tabla ya existía, asegurarse de tener la columna account_id:
+ALTER TABLE public.videos ADD COLUMN IF NOT EXISTS account_id TEXT;
 
 -- 5. Habilitar Row Level Security (RLS)
 ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;

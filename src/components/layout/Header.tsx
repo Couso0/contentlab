@@ -2,6 +2,7 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { Video, Sun, Moon, Database, Plus, LogOut, Users } from 'lucide-react';
 import { ModelDropdown } from './ModelDropdown';
+import { AccountDropdown } from './AccountDropdown';
 
 export const Header: React.FC = () => {
   const {
@@ -34,9 +35,12 @@ export const Header: React.FC = () => {
         </div>
       </div>
 
-      {/* Selector de Modelos Central Personalizado */}
+      {/* Selectores de Creadora y Cuenta Centrales */}
       <div className="header-center">
-        <ModelDropdown />
+        <div className="header-filters-cluster">
+          <ModelDropdown />
+          <AccountDropdown />
+        </div>
       </div>
 
       {/* Acciones Derecha */}

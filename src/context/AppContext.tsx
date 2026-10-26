@@ -29,6 +29,8 @@ interface AppContextType {
   filteredVideos: VideoItem[];
   selectedModelId: string | 'all';
   setSelectedModelId: (id: string | 'all') => void;
+  selectedAccountId: string | 'all';
+  setSelectedAccountId: (id: string | 'all') => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   activeTab: ActiveTab;
@@ -39,6 +41,8 @@ interface AppContextType {
   setIsCreateVideoOpen: (open: boolean) => void;
   preselectedDate: string | null;
   setPreselectedDate: (date: string | null) => void;
+  preselectedAccountId: string | null;
+  setPreselectedAccountId: (id: string | null) => void;
   activeModel: Model | null;
   setActiveModel: (model: Model | null) => void;
   isModelModalOpen: boolean;
@@ -80,13 +84,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [models, setModels] = useState<Model[]>([]);
   const [videos, setVideos] = useState<VideoItem[]>([]);
-  const [selectedModelId, setSelectedModelId] = useState<string | 'all'>('all');
+  const [selectedModelId, setSelectedModelIdState] = useState<string | 'all'>('all');
+  const [selectedAccountId, setSelectedAccountId] = useState<string | 'all'>('all');
+
+  const setSelectedModelId = (id: string | 'all') => {
+    setSelectedModelIdState(id);
+    setSelectedAccountId('all');
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<ActiveTab>('modelos');
 
   const [activeVideo, setActiveVideo] = useState<VideoItem | null>(null);
   const [isCreateVideoOpen, setIsCreateVideoOpen] = useState(false);
   const [preselectedDate, setPreselectedDate] = useState<string | null>(null);
+  const [preselectedAccountId, setPreselectedAccountId] = useState<string | null>(null);
   const [activeModel, setActiveModel] = useState<Model | null>(null);
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -267,13 +278,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (selectedModelId !== 'all' && video.model_id !== selectedModelId) {
       return false;
     }
+    if (selectedAccountId !== 'all' && video.account_id && video.account_id !== selectedAccountId) {
+      return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchTitle = video.title.toLowerCase().includes(q);
       const matchNotes = (video.notes || '').toLowerCase().includes(q);
       const model = models.find((m) => m.id === video.model_id);
       const matchModel = model ? model.name.toLowerCase().includes(q) : false;
-      return matchTitle || matchNotes || matchModel;
+      const account = model?.accounts?.find((a) => a.id === video.account_id);
+      const matchAccount = account
+        ? account.handle.toLowerCase().includes(q) || account.name.toLowerCase().includes(q)
+        : false;
+      return matchTitle || matchNotes || matchModel || matchAccount;
     }
     return true;
   });
@@ -295,6 +313,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         filteredVideos,
         selectedModelId,
         setSelectedModelId,
+        selectedAccountId,
+        setSelectedAccountId,
         searchQuery,
         setSearchQuery,
         activeTab,
@@ -305,6 +325,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsCreateVideoOpen,
         preselectedDate,
         setPreselectedDate,
+        preselectedAccountId,
+        setPreselectedAccountId,
         activeModel,
         setActiveModel,
         isModelModalOpen,

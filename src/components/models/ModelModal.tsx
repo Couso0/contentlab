@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { uploadAvatarToStorage } from '../../lib/supabase';
-import type { Model } from '../../types';
-import { User, X, Check, Trash2, Camera, Upload, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import type { Model, ModelAccount } from '../../types';
+import { User, X, Check, Trash2, Camera, Upload, AlertCircle, Image as ImageIcon, Plus, Smartphone, Star } from 'lucide-react';
 
 interface ModelModalProps {
   model: Model | null;
@@ -18,14 +18,24 @@ const DEFAULT_AVATARS = [
   'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
 ];
 
+const PLATFORM_OPTIONS = [
+  'Instagram',
+  'TikTok',
+  'OnlyFans',
+  'YouTube Shorts',
+  'Facebook Reels',
+  'X / Twitter',
+  'Fansly',
+  'Twitch',
+];
+
 export const ModelModal: React.FC<ModelModalProps> = ({ model, isOpen, onClose }) => {
   const { upsertModel, deleteModel, userRole } = useApp();
 
   const [name, setName] = useState('');
-  const [handle, setHandle] = useState('');
-  const [platform, setPlatform] = useState('Instagram');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [notes, setNotes] = useState('');
+  const [accounts, setAccounts] = useState<ModelAccount[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -36,22 +46,82 @@ export const ModelModal: React.FC<ModelModalProps> = ({ model, isOpen, onClose }
   useEffect(() => {
     if (model) {
       setName(model.name);
-      setHandle(model.handle || '');
-      setPlatform(model.platform || 'Instagram');
       setAvatarUrl(model.avatar_url || '');
       setNotes(model.notes || '');
+      const initialAccounts =
+        model.accounts && model.accounts.length > 0
+          ? model.accounts.map((a) => ({ ...a }))
+          : [
+              {
+                id: `${model.id}_main`,
+                name: 'Principal',
+                handle: model.handle || '',
+                platform: model.platform || 'Instagram',
+                is_primary: true,
+              },
+            ];
+      setAccounts(initialAccounts);
     } else {
       setName('');
-      setHandle('');
-      setPlatform('Instagram');
       setAvatarUrl(DEFAULT_AVATARS[0]);
       setNotes('');
+      setAccounts([
+        {
+          id: crypto.randomUUID(),
+          name: 'Principal',
+          handle: '',
+          platform: 'Instagram',
+          is_primary: true,
+        },
+      ]);
     }
     setShowDeleteConfirm(false);
     setErrorMsg(null);
   }, [model, isOpen]);
 
   if (!isOpen) return null;
+
+  const handleAddAccount = () => {
+    setAccounts((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        name: '',
+        handle: '',
+        platform: 'Instagram',
+        is_primary: prev.length === 0,
+      },
+    ]);
+  };
+
+  const handleUpdateAccount = (id: string, updates: Partial<ModelAccount>) => {
+    setAccounts((prev) =>
+      prev.map((acc) => (acc.id === id ? { ...acc, ...updates } : acc))
+    );
+  };
+
+  const handleSetPrimaryAccount = (id: string) => {
+    setAccounts((prev) =>
+      prev.map((acc) => ({
+        ...acc,
+        is_primary: acc.id === id,
+      }))
+    );
+  };
+
+  const handleRemoveAccount = (id: string) => {
+    if (accounts.length <= 1) {
+      setErrorMsg('Cada modelo debe tener al menos una cuenta configurada.');
+      return;
+    }
+    setAccounts((prev) => {
+      const filtered = prev.filter((acc) => acc.id !== id);
+      if (!filtered.some((acc) => acc.is_primary) && filtered.length > 0) {
+        filtered[0].is_primary = true;
+      }
+      return filtered;
+    });
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -82,15 +152,24 @@ export const ModelModal: React.FC<ModelModalProps> = ({ model, isOpen, onClose }
       return;
     }
 
+    const primaryAcc = accounts.find((a) => a.is_primary) || accounts[0];
+    const cleanAccounts = accounts.map((a, idx) => ({
+      ...a,
+      name: a.name.trim() || (a.is_primary ? 'Principal' : `Cuenta ${idx + 1}`),
+      handle: a.handle.trim(),
+      is_primary: primaryAcc ? a.id === primaryAcc.id : idx === 0,
+    }));
+
     setIsSaving(true);
     try {
       await upsertModel({
         id: model?.id,
         name: name.trim().toUpperCase(),
-        handle: handle.trim(),
-        platform,
+        handle: primaryAcc?.handle.trim() || `@${name.trim().toLowerCase().replace(/\s+/g, '')}`,
+        platform: primaryAcc?.platform || 'Instagram',
         avatar_url: avatarUrl.trim() || DEFAULT_AVATARS[0],
         notes: notes.trim(),
+        accounts: cleanAccounts,
       });
       onClose();
     } catch (err: any) {
@@ -296,31 +375,138 @@ export const ModelModal: React.FC<ModelModalProps> = ({ model, isOpen, onClose }
             />
           </div>
 
-          {/* Usuario y Plataforma */}
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Usuario / Handle</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="@usuario"
-                value={handle}
-                onChange={(e) => setHandle(e.target.value)}
-              />
+          {/* Sección de Cuentas de la Modelo / Redes Sociales */}
+          <div className="form-group" style={{ marginTop: '4px' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '8px',
+              }}
+            >
+              <div>
+                <label className="form-label" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Smartphone size={15} color="var(--primary)" />
+                  <span>Cuentas de la Modelo / Redes Sociales</span>
+                </label>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Configura todas las cuentas de la modelo (Instagram principal, backup, TikTok, OnlyFans, etc.) para seleccionarlas en los menús desplegables.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleAddAccount}
+                style={{
+                  padding: '5px 10px',
+                  fontSize: '0.74rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <Plus size={13} />
+                <span>Agregar Cuenta</span>
+              </button>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Plataforma Principal</label>
-              <select
-                className="form-select"
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value)}
-              >
-                <option value="Instagram">Instagram</option>
-                <option value="TikTok">TikTok</option>
-                <option value="YouTube Shorts">YouTube Shorts</option>
-                <option value="Facebook Reels">Facebook Reels</option>
-              </select>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {accounts.map((acc) => (
+                <div
+                  key={acc.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 10px',
+                    backgroundColor: acc.is_primary ? 'rgba(139, 92, 246, 0.08)' : 'var(--bg-surface)',
+                    border: acc.is_primary ? '1px solid rgba(139, 92, 246, 0.45)' : '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-sm)',
+                    flexWrap: 'wrap',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {/* Selector de Plataforma */}
+                  <div style={{ width: '135px', flexShrink: 0 }}>
+                    <select
+                      className="form-select"
+                      style={{ padding: '6px 8px', fontSize: '0.78rem' }}
+                      value={acc.platform}
+                      onChange={(e) => handleUpdateAccount(acc.id, { platform: e.target.value })}
+                    >
+                      {PLATFORM_OPTIONS.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Usuario / Handle */}
+                  <div style={{ flex: '1 1 120px' }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ padding: '6px 10px', fontSize: '0.78rem' }}
+                      placeholder="@usuario"
+                      value={acc.handle}
+                      onChange={(e) => handleUpdateAccount(acc.id, { handle: e.target.value })}
+                    />
+                  </div>
+
+                  {/* Alias / Nombre de cuenta */}
+                  <div style={{ flex: '1 1 110px' }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ padding: '6px 10px', fontSize: '0.78rem' }}
+                      placeholder="Ej. Principal, VIP"
+                      value={acc.name}
+                      onChange={(e) => handleUpdateAccount(acc.id, { name: e.target.value })}
+                    />
+                  </div>
+
+                  {/* Botón de Cuenta Principal */}
+                  <button
+                    type="button"
+                    onClick={() => handleSetPrimaryAccount(acc.id)}
+                    title={acc.is_primary ? 'Cuenta principal activa' : 'Marcar como cuenta principal'}
+                    style={{
+                      padding: '5px 8px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: acc.is_primary ? '1px solid #f59e0b' : '1px solid var(--border-subtle)',
+                      backgroundColor: acc.is_primary ? 'rgba(245, 158, 11, 0.15)' : 'transparent',
+                      color: acc.is_primary ? '#fbbf24' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '0.72rem',
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <Star size={13} fill={acc.is_primary ? '#fbbf24' : 'none'} />
+                    <span>{acc.is_primary ? 'Principal' : 'Fijar'}</span>
+                  </button>
+
+                  {/* Botón Eliminar Cuenta */}
+                  {accounts.length > 1 && (
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={() => handleRemoveAccount(acc.id)}
+                      style={{ width: '28px', height: '28px', color: '#f87171' }}
+                      title="Eliminar esta cuenta"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 

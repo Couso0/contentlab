@@ -34,9 +34,18 @@ interface VideoModalProps {
 }
 
 export const VideoModal: React.FC<VideoModalProps> = ({ video, isOpen, onClose, isNew = false }) => {
-  const { models, userRole, upsertVideo, deleteVideo, preselectedDate } = useApp();
+  const {
+    models,
+    userRole,
+    upsertVideo,
+    deleteVideo,
+    preselectedDate,
+    preselectedAccountId,
+    selectedModelId,
+  } = useApp();
 
   const [modelId, setModelId] = useState('');
+  const [accountId, setAccountId] = useState('');
   const [title, setTitle] = useState('');
   const [referenceUrl, setReferenceUrl] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
@@ -57,6 +66,7 @@ export const VideoModal: React.FC<VideoModalProps> = ({ video, isOpen, onClose, 
   useEffect(() => {
     if (video) {
       setModelId(video.model_id);
+      setAccountId(video.account_id || '');
       setTitle(video.title);
       setReferenceUrl(video.reference_url || '');
       setVideoUrl(video.video_url || '');
@@ -66,7 +76,11 @@ export const VideoModal: React.FC<VideoModalProps> = ({ video, isOpen, onClose, 
       setNotes(video.notes || '');
     } else {
       // Valores por defecto al crear uno nuevo
-      setModelId(models[0]?.id || '');
+      const defaultModelId = (selectedModelId !== 'all' ? selectedModelId : models[0]?.id) || '';
+      const targetModel = models.find((m) => m.id === defaultModelId);
+      const defaultAccId = preselectedAccountId || targetModel?.accounts?.[0]?.id || '';
+      setModelId(defaultModelId);
+      setAccountId(defaultAccId);
       setTitle('');
       setReferenceUrl('');
       setVideoUrl('');
@@ -77,7 +91,7 @@ export const VideoModal: React.FC<VideoModalProps> = ({ video, isOpen, onClose, 
     }
     setUploadError(null);
     setUploadPercent(0);
-  }, [video, isOpen, models, preselectedDate]);
+  }, [video, isOpen, models, preselectedDate, preselectedAccountId, selectedModelId]);
 
   if (!isOpen) return null;
 
@@ -131,6 +145,7 @@ export const VideoModal: React.FC<VideoModalProps> = ({ video, isOpen, onClose, 
       await upsertVideo({
         id: video?.id,
         model_id: modelId,
+        account_id: accountId || undefined,
         title: title.trim(),
         reference_url: referenceUrl.trim(),
         video_url: videoUrl,
@@ -181,24 +196,50 @@ export const VideoModal: React.FC<VideoModalProps> = ({ video, isOpen, onClose, 
 
           {/* Form / Body */}
           <form onSubmit={handleSave} className="modal-body">
-            {/* Modelo / Creadora */}
-            <div className="form-group">
-              <label className="form-label">
-                Modelo / Creadora <span className="req">*</span>
-              </label>
-              <select
-                className="form-select"
-                value={modelId}
-                onChange={(e) => setModelId(e.target.value)}
-                disabled={isReadOnly}
-                required
-              >
-                {models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.platform || 'Instagram'})
-                  </option>
-                ))}
-              </select>
+            {/* Modelo / Creadora y Cuenta de la Modelo */}
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">
+                  Modelo / Creadora <span className="req">*</span>
+                </label>
+                <select
+                  className="form-select"
+                  value={modelId}
+                  onChange={(e) => {
+                    const newModelId = e.target.value;
+                    setModelId(newModelId);
+                    const target = models.find((m) => m.id === newModelId);
+                    setAccountId(target?.accounts?.[0]?.id || '');
+                  }}
+                  disabled={isReadOnly}
+                  required
+                >
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">
+                  Cuenta de la Modelo
+                </label>
+                <select
+                  className="form-select"
+                  value={accountId}
+                  onChange={(e) => setAccountId(e.target.value)}
+                  disabled={isReadOnly}
+                >
+                  <option value="">-- Toda la creadora / Sin cuenta --</option>
+                  {(models.find((m) => m.id === modelId)?.accounts || []).map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.handle || acc.name} ({acc.platform}{acc.is_primary ? ' • Principal' : ''})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Título / Concepto */}

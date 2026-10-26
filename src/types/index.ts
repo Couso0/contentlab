@@ -7,6 +7,16 @@ export type VideoStatus =
   | 'Listo'
   | 'Publicado';
 
+export interface ModelAccount {
+  id: string;
+  name: string; // ej: 'Principal', 'Backup', 'VIP', 'TikTok 2'
+  handle: string; // ej: '@lilyvaldez'
+  platform: string; // 'Instagram', 'TikTok', 'OnlyFans', etc.
+  avatar_url?: string;
+  is_primary?: boolean;
+  notes?: string;
+}
+
 export interface Model {
   id: string;
   name: string;
@@ -14,12 +24,14 @@ export interface Model {
   platform: string;
   avatar_url?: string;
   notes?: string;
+  accounts?: ModelAccount[];
   created_at?: string;
 }
 
 export interface VideoItem {
   id: string;
   model_id: string;
+  account_id?: string;
   title: string;
   reference_url?: string;
   video_url?: string;
@@ -36,6 +48,7 @@ export type ActiveTab = 'calendario' | 'modelos';
 
 export interface FilterState {
   modelId: string | 'all';
+  accountId: string | 'all';
   searchQuery: string;
   statusFilter: string | 'all';
 }

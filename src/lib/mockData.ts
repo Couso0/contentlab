@@ -8,6 +8,29 @@ export const INITIAL_MODELS: Model[] = [
     platform: 'Instagram',
     avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
     notes: 'Modelo principal de lifestyle y contenido diario. Foco en Instagram Reels y TikTok.',
+    accounts: [
+      {
+        id: 'acc_lily_1',
+        name: 'Instagram Principal',
+        handle: '@lilyvaldez',
+        platform: 'Instagram',
+        is_primary: true,
+      },
+      {
+        id: 'acc_lily_2',
+        name: 'TikTok Oficial',
+        handle: '@lilyvaldez.tt',
+        platform: 'TikTok',
+        is_primary: false,
+      },
+      {
+        id: 'acc_lily_3',
+        name: 'Cuenta VIP / Backup',
+        handle: '@lily_exclusive',
+        platform: 'Instagram',
+        is_primary: false,
+      },
+    ],
     created_at: '2026-09-01T10:00:00Z',
   },
   {
@@ -17,6 +40,22 @@ export const INITIAL_MODELS: Model[] = [
     platform: 'TikTok',
     avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
     notes: 'Enfoque en tendencias de moda, try-on hauls y transiciones estéticas.',
+    accounts: [
+      {
+        id: 'acc_sofia_1',
+        name: 'TikTok Principal',
+        handle: '@sofiamora',
+        platform: 'TikTok',
+        is_primary: true,
+      },
+      {
+        id: 'acc_sofia_2',
+        name: 'Instagram Moda',
+        handle: '@sofiamora.style',
+        platform: 'Instagram',
+        is_primary: false,
+      },
+    ],
     created_at: '2026-09-10T12:00:00Z',
   },
   {
@@ -26,6 +65,22 @@ export const INITIAL_MODELS: Model[] = [
     platform: 'Instagram',
     avatar_url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80',
     notes: 'Creadora con fuerte engagement en historias y shorts dinámicos.',
+    accounts: [
+      {
+        id: 'acc_val_1',
+        name: 'Instagram Principal',
+        handle: '@valentinarios',
+        platform: 'Instagram',
+        is_primary: true,
+      },
+      {
+        id: 'acc_val_2',
+        name: 'TikTok Trends',
+        handle: '@valentina.clips',
+        platform: 'TikTok',
+        is_primary: false,
+      },
+    ],
     created_at: '2026-09-15T08:30:00Z',
   },
 ];
@@ -35,6 +90,7 @@ export const INITIAL_VIDEOS: VideoItem[] = [
   {
     id: 'v1',
     model_id: 'm1',
+    account_id: 'acc_lily_1',
     title: 'Centímetros',
     reference_url: 'https://www.instagram.com/reel/Dcf88GiNYfS/?utm_source=ig_web_copy_link',
     video_url: 'https://assets.mixkit.co/videos/preview/mixkit-young-woman-talking-on-video-call-with-her-smartphone-41444-large.mp4',
@@ -47,6 +103,7 @@ export const INITIAL_VIDEOS: VideoItem[] = [
   {
     id: 'v2',
     model_id: 'm1',
+    account_id: 'acc_lily_2',
     title: 'Video de halloween',
     reference_url: 'https://www.tiktok.com/@trend/halloween_costume_reveal',
     video_url: 'https://assets.mixkit.co/videos/preview/mixkit-fashion-model-in-neon-light-40432-large.mp4',
@@ -59,6 +116,7 @@ export const INITIAL_VIDEOS: VideoItem[] = [
   {
     id: 'v3',
     model_id: 'm1',
+    account_id: 'acc_lily_3',
     title: 'Halloween Mostrar...',
     reference_url: 'https://www.instagram.com/reels',
     video_url: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-a-leather-jacket-standing-under-neon-light-40431-large.mp4',
@@ -71,6 +129,7 @@ export const INITIAL_VIDEOS: VideoItem[] = [
   {
     id: 'v4',
     model_id: 'm2',
+    account_id: 'acc_sofia_1',
     title: 'Halloween costume',
     reference_url: 'https://www.tiktok.com/@costume_ideas',
     video_url: 'https://assets.mixkit.co/videos/preview/mixkit-girl-holding-a-sparkler-at-night-42171-large.mp4',
@@ -83,6 +142,7 @@ export const INITIAL_VIDEOS: VideoItem[] = [
   {
     id: 'v5',
     model_id: 'm1',
+    account_id: 'acc_lily_1',
     title: 'TIPO DE CENTÍMETROS',
     reference_url: 'https://www.instagram.com/reel/inspocm',
     video_url: 'https://assets.mixkit.co/videos/preview/mixkit-young-woman-talking-on-video-call-with-her-smartphone-41444-large.mp4',
@@ -95,6 +155,7 @@ export const INITIAL_VIDEOS: VideoItem[] = [
   {
     id: 'v6',
     model_id: 'm3',
+    account_id: 'acc_val_1',
     title: 'Video un poco mas...',
     reference_url: 'https://www.instagram.com/reels/trend_slow',
     video_url: 'https://assets.mixkit.co/videos/preview/mixkit-woman-dancing-with-neon-lights-in-the-background-40433-large.mp4',
@@ -107,6 +168,7 @@ export const INITIAL_VIDEOS: VideoItem[] = [
   {
     id: 'v7',
     model_id: 'm1',
+    account_id: 'acc_lily_2',
     title: 'JUGAR CON LA...',
     reference_url: 'https://www.instagram.com/reels',
     video_url: 'https://assets.mixkit.co/videos/preview/mixkit-fashion-model-in-neon-light-40432-large.mp4',
@@ -119,6 +181,7 @@ export const INITIAL_VIDEOS: VideoItem[] = [
   {
     id: 'v8',
     model_id: 'm2',
+    account_id: 'acc_sofia_2',
     title: 'trend cabello/pelo',
     reference_url: 'https://www.tiktok.com/@hair_trend',
     video_url: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-a-leather-jacket-standing-under-neon-light-40431-large.mp4',
@@ -131,6 +194,7 @@ export const INITIAL_VIDEOS: VideoItem[] = [
   {
     id: 'v9',
     model_id: 'm1',
+    account_id: 'acc_lily_1',
     title: 'Trend provocativo',
     reference_url: 'https://www.instagram.com/reel/DeXEAtAy4Oz1j/?utm_source=ig_web_copy_link',
     video_url: 'https://assets.mixkit.co/videos/preview/mixkit-woman-dancing-with-neon-lights-in-the-background-40433-large.mp4',
@@ -143,6 +207,7 @@ export const INITIAL_VIDEOS: VideoItem[] = [
   {
     id: 'v10',
     model_id: 'm3',
+    account_id: 'acc_val_2',
     title: 'Foto de mostrar',
     reference_url: 'https://www.instagram.com/reels',
     video_url: 'https://assets.mixkit.co/videos/preview/mixkit-young-woman-talking-on-video-call-with-her-smartphone-41444-large.mp4',
