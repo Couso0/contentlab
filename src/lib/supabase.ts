@@ -2,17 +2,73 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Model, VideoItem, AppUser, UserRole, ModelAccount } from '../types';
 import { INITIAL_MODELS, INITIAL_VIDEOS } from './mockData';
 
-// Helper para garantizar que todo modelo tenga al menos una cuenta configurada
+const STORAGE_CUSTOM_ACCOUNTS_KEY = 'contentlab_custom_accounts_map';
+const STORAGE_CUSTOM_VIDEO_ACCOUNTS_KEY = 'contentlab_custom_video_accounts_map';
+
+export const getCustomAccountsMap = (): Record<string, ModelAccount[]> => {
+  try {
+    const raw = localStorage.getItem(STORAGE_CUSTOM_ACCOUNTS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+export const saveCustomAccountsForModel = (modelId: string, accounts: ModelAccount[]) => {
+  try {
+    const map = getCustomAccountsMap();
+    map[modelId] = accounts;
+    localStorage.setItem(STORAGE_CUSTOM_ACCOUNTS_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.warn('Error guardando cuentas personalizadas:', e);
+  }
+};
+
+export const getCustomVideoAccountsMap = (): Record<string, string> => {
+  try {
+    const raw = localStorage.getItem(STORAGE_CUSTOM_VIDEO_ACCOUNTS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+export const saveCustomAccountForVideo = (videoId: string, accountId: string | undefined) => {
+  try {
+    const map = getCustomVideoAccountsMap();
+    if (accountId) {
+      map[videoId] = accountId;
+    } else {
+      delete map[videoId];
+    }
+    localStorage.setItem(STORAGE_CUSTOM_VIDEO_ACCOUNTS_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.warn('Error guardando cuenta de video:', e);
+  }
+};
+
+// Helper para garantizar que todo modelo tenga cuentas configuradas
 export const getModelAccounts = (model: Model): ModelAccount[] => {
+  // 1. Si el usuario guardó/editó cuentas personalizadas en el navegador para este modelo (prioridad máxima local):
+  const customMap = getCustomAccountsMap();
+  if (customMap[model.id] && Array.isArray(customMap[model.id])) {
+    return customMap[model.id];
+  }
+
+  // 2. Si el modelo ya trae cuentas válidas (ej. desde Supabase cuando se tiene la columna accounts):
   if (model.accounts && Array.isArray(model.accounts) && model.accounts.length > 0) {
     return model.accounts;
   }
+
+  // 3. Si coincide con una modelo inicial precargada (ej. LILY VALDEZ, SOFIA MORA, VALENTINA RIOS):
   const initial = INITIAL_MODELS.find(
     (im) => im.id === model.id || im.name.trim().toLowerCase() === model.name.trim().toLowerCase()
   );
   if (initial?.accounts && initial.accounts.length > 0) {
     return initial.accounts;
   }
+
+  // 4. Fallback predeterminado a 1 cuenta principal:
   return [
     {
       id: `${model.id}_main`,
@@ -30,6 +86,10 @@ export const normalizeModel = (model: Model): Model => ({
 });
 
 export const normalizeVideo = (video: VideoItem): VideoItem => {
+  const customVideoAccounts = getCustomVideoAccountsMap();
+  if (customVideoAccounts[video.id]) {
+    return { ...video, account_id: customVideoAccounts[video.id] };
+  }
   if (video.account_id) return video;
   const initial = INITIAL_VIDEOS.find(
     (iv) => iv.id === video.id || iv.title.trim().toLowerCase() === video.title.trim().toLowerCase()
@@ -170,11 +230,17 @@ export const getModels = async (): Promise<Model[]> => {
 export const saveModel = async (model: Omit<Model, 'id' | 'created_at'> & { id?: string }): Promise<Model> => {
   const client = getSupabaseClient();
   const id = model.id || crypto.randomUUID();
-  const fullModel: Model = normalizeModel({
+  const accountsToSave = model.accounts !== undefined ? model.accounts : getModelAccounts({ ...model, id } as Model);
+
+  // Guardar siempre en el mapa de cuentas personalizadas local
+  saveCustomAccountsForModel(id, accountsToSave);
+
+  const fullModel: Model = {
     ...model,
     id,
+    accounts: accountsToSave,
     created_at: new Date().toISOString(),
-  });
+  };
 
   if (client) {
     try {
@@ -185,10 +251,8 @@ export const saveModel = async (model: Omit<Model, 'id' | 'created_at'> & { id?:
         platform: fullModel.platform,
         avatar_url: fullModel.avatar_url,
         notes: fullModel.notes,
+        accounts: fullModel.accounts,
       };
-      if (fullModel.accounts && fullModel.accounts.length > 0) {
-        payload.accounts = fullModel.accounts;
-      }
 
       const { data, error } = await client
         .from('models')
@@ -197,7 +261,28 @@ export const saveModel = async (model: Omit<Model, 'id' | 'created_at'> & { id?:
         .single();
 
       if (!error && data) {
-        return normalizeModel(data);
+        return {
+          ...normalizeModel(data),
+          accounts: accountsToSave,
+        };
+      }
+
+      // Si Supabase falla porque falta la columna accounts:
+      if (error && (error.message?.includes('accounts') || error.code === 'PGRST204' || error.message?.includes('column'))) {
+        console.warn('La tabla models en Supabase aun no tiene la columna accounts. Guardando datos en Supabase y cuentas en local.', error.message);
+        delete payload.accounts;
+        const { data: retryData, error: retryError } = await client
+          .from('models')
+          .upsert(payload)
+          .select()
+          .single();
+
+        if (!retryError && retryData) {
+          return {
+            ...normalizeModel(retryData),
+            accounts: accountsToSave,
+          };
+        }
       }
     } catch (err) {
       console.warn('Error al guardar modelo en Supabase:', err);
@@ -219,6 +304,11 @@ export const saveModel = async (model: Omit<Model, 'id' | 'created_at'> & { id?:
 };
 
 export const deleteModel = async (id: string): Promise<boolean> => {
+  try {
+    const map = getCustomAccountsMap();
+    delete map[id];
+    localStorage.setItem(STORAGE_CUSTOM_ACCOUNTS_KEY, JSON.stringify(map));
+  } catch {}
   const client = getSupabaseClient();
   if (client) {
     try {
@@ -288,6 +378,8 @@ export const getVideos = async (): Promise<VideoItem[]> => {
 export const saveVideo = async (video: Partial<VideoItem> & { model_id: string; title: string; planned_date: string }): Promise<VideoItem> => {
   const client = getSupabaseClient();
   const id = video.id || crypto.randomUUID();
+  saveCustomAccountForVideo(id, video.account_id);
+
   const fullVideo: VideoItem = {
     id,
     model_id: video.model_id,
@@ -328,7 +420,28 @@ export const saveVideo = async (video: Partial<VideoItem> & { model_id: string; 
         .single();
 
       if (!error && data) {
-        return data;
+        return {
+          ...data,
+          account_id: fullVideo.account_id,
+        };
+      }
+
+      // Si Supabase falla porque falta la columna account_id:
+      if (error && (error.message?.includes('account_id') || error.code === 'PGRST204' || error.message?.includes('column'))) {
+        console.warn('La tabla videos en Supabase aun no tiene la columna account_id. Reintentando sin la columna.', error.message);
+        delete payload.account_id;
+        const { data: retryVideo, error: retryError } = await client
+          .from('videos')
+          .upsert(payload)
+          .select()
+          .single();
+
+        if (!retryError && retryVideo) {
+          return {
+            ...retryVideo,
+            account_id: fullVideo.account_id,
+          };
+        }
       }
     } catch (err) {
       console.warn('Error al guardar video en Supabase:', err);

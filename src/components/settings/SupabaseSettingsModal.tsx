@@ -137,16 +137,16 @@ export const SupabaseSettingsModal: React.FC<SupabaseSettingsModalProps> = ({ is
           {/* Guía rápida de SQL */}
           <div
             style={{
-              padding: '12px 14px',
-              background: 'rgba(255, 255, 255, 0.03)',
+              padding: '14px',
+              background: 'rgba(139, 92, 246, 0.08)',
               borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-subtle)',
+              border: '1px solid rgba(139, 92, 246, 0.35)',
               fontSize: '0.78rem',
               color: 'var(--text-secondary)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 600, color: '#f1f5f9' }}>📌 Script SQL generado:</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontWeight: 700, color: '#f1f5f9' }}>⚡ Actualización SQL para Múltiples Cuentas:</span>
               <a
                 href="https://supabase.com/dashboard"
                 target="_blank"
@@ -160,13 +160,29 @@ export const SupabaseSettingsModal: React.FC<SupabaseSettingsModalProps> = ({ is
                   fontSize: '0.72rem',
                 }}
               >
-                <span>Ir a Supabase</span>
+                <span>Ir al SQL Editor</span>
                 <ExternalLink size={12} />
               </a>
             </div>
-            <p style={{ marginTop: '4px', lineHeight: 1.4 }}>
-              Tienes el archivo <code>supabase/schema.sql</code> listo en tu proyecto con las tablas de <code>models</code>, <code>videos</code> y el bucket de Storage <code>videos</code> configurado.
+            <p style={{ lineHeight: 1.4, marginBottom: '8px' }}>
+              Si conectaste Supabase, ejecuta estas 2 líneas en el <strong>SQL Editor</strong> de tu proyecto para que las cuentas se guarden en la nube:
             </p>
+            <pre
+              style={{
+                backgroundColor: 'rgba(0, 0, 0, 0.4)',
+                padding: '10px',
+                borderRadius: '6px',
+                fontFamily: 'monospace',
+                fontSize: '0.72rem',
+                color: '#38bdf8',
+                overflowX: 'auto',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                userSelect: 'all',
+              }}
+            >
+{`ALTER TABLE public.models ADD COLUMN IF NOT EXISTS accounts JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.videos ADD COLUMN IF NOT EXISTS account_id TEXT;`}
+            </pre>
           </div>
 
           <div
